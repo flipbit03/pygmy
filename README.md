@@ -8,7 +8,7 @@
 
 `pygmy` lets AI coding agents (Claude Code, etc.) send you notifications when they finish a task, hit a blocker, or need your attention. You get a ping on your phone/desktop and come back when you're ready.
 
-Supports **Telegram** (forum topics) and **Discord** (webhooks). Configure one or both — messages are sent to all enabled backends.
+Supports **Telegram** (forum topics), **Discord** (webhooks), and **[ntfy](https://ntfy.sh)** (push notifications). Configure one or more — messages are sent to all enabled backends.
 
 Notification is unidirectional — the agent can't read your replies, so it's just a simple "ping" to draw you back to the agent's interface.
 
@@ -30,7 +30,8 @@ Run `pygmy init <backend>` and follow the instructions:
 
 ```bash
 pygmy init telegram          # Telegram bot + forum group
-pygmy init discord-webhook   # Discord webhook (simplest)
+pygmy init discord-webhook   # Discord webhook
+pygmy init ntfy              # ntfy push notifications (simplest)
 ```
 
 You can set up both. After setup, copy the config file (`~/.config/pygmy/config.toml`) to any machine where you run agents.
@@ -61,7 +62,7 @@ pygmy --topic "investigation" --stdin <<'EOF'
 EOF
 ```
 
-Messages are Markdown. Telegram messages are converted to HTML; Discord messages are sent as-is (Discord renders Markdown natively). Topics are created on first use — no manual setup needed.
+Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy messages are sent as-is (both render Markdown natively). Topics are created on first use — no manual setup needed.
 
 ### What it looks like
 
@@ -88,6 +89,18 @@ Messages are Markdown. Telegram messages are converted to HTML; Discord messages
   ┊ Build failed
 ```
 
+**ntfy** — topic name appears as the notification title:
+```
+📱 ntfy (your-pygmy-topic)
+  ┌─────────────────────────────────────┐
+  │ CAD-1234 auth refactor              │
+  │ Done. PR #47 ready for review.      │
+  ├─────────────────────────────────────┤
+  │ deploy                              │
+  │ Build failed                        │
+  └─────────────────────────────────────┘
+```
+
 ## Agent integration
 
 After setup, add this to your `CLAUDE.md` (or equivalent agent instructions file). `pygmy init` prints this snippet for you.
@@ -95,7 +108,7 @@ After setup, add this to your `CLAUDE.md` (or equivalent agent instructions file
 ~~~markdown
 ## Notifications (pygmy)
 
-Use `pygmy` to notify me. Messages are Markdown, sent to all configured backends (Telegram, Discord, etc.).
+Use `pygmy` to notify me. Messages are Markdown, sent to all enabled backends.
 
 **When to use:**
 - When I say "ping me", "notify me", or "let me know when done"

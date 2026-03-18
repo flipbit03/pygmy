@@ -3,21 +3,24 @@ use anyhow::Result;
 use crate::config;
 use crate::discord;
 use crate::markdown;
+use crate::ntfy;
 use crate::telegram;
 
 const TELEGRAM_MAX_LENGTH: usize = 4096;
 const DISCORD_MAX_LENGTH: usize = 2000;
+const NTFY_MAX_LENGTH: usize = 4096;
 
 pub async fn send(topic: &str, message: &str) -> Result<()> {
     let config = config::load_config()?;
 
     let telegram_enabled = config.telegram.as_ref().is_some_and(|t| t.enabled);
     let discord_enabled = config.discord_webhook.as_ref().is_some_and(|d| d.enabled);
+    let ntfy_enabled = config.ntfy.as_ref().is_some_and(|n| n.enabled);
 
-    if !telegram_enabled && !discord_enabled {
+    if !telegram_enabled && !discord_enabled && !ntfy_enabled {
         anyhow::bail!(
             "No notification backends are enabled.\n\
-             Run `pygmy init telegram` or `pygmy init discord-webhook` to set one up,\n\
+             Run `pygmy init <backend>` to set one up,\n\
              or `pygmy enable <backend>` to re-enable a configured one."
         );
     }
@@ -40,6 +43,15 @@ pub async fn send(topic: &str, message: &str) -> Result<()> {
         match send_discord(dw, topic, message).await {
             Ok(()) => any_success = true,
             Err(e) => errors.push(format!("discord-webhook: {e:#}")),
+        }
+    }
+
+    if let Some(ntfy_config) = &config.ntfy
+        && ntfy_config.enabled
+    {
+        match send_ntfy(ntfy_config, topic, message).await {
+            Ok(()) => any_success = true,
+            Err(e) => errors.push(format!("ntfy: {e:#}")),
         }
     }
 
@@ -92,6 +104,16 @@ async fn send_discord(
 
     for chunk in &chunks {
         discord::send_message(&config.url, chunk).await?;
+    }
+
+    Ok(())
+}
+
+async fn send_ntfy(config: &config::NtfyConfig, topic: &str, message: &str) -> Result<()> {
+    let chunks = chunk_message(message, NTFY_MAX_LENGTH);
+
+    for chunk in &chunks {
+        ntfy::send_message(config, topic, chunk).await?;
     }
 
     Ok(())

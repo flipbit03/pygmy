@@ -15,6 +15,7 @@ USAGE
   echo \"...\" | pygmy --topic <TOPIC>        Pipe message from stdin
   pygmy init telegram                       Set up Telegram bot + group
   pygmy init discord-webhook                Set up Discord webhook
+  pygmy init ntfy                           Set up ntfy push notifications
   pygmy enable <BACKEND>                    Enable a configured backend
   pygmy disable <BACKEND>                   Disable a configured backend
   pygmy status                              Show configured backends
@@ -23,25 +24,27 @@ USAGE
   pygmy usage                               Show this reference
 
 OPTIONS
-  --topic <NAME>   Topic name (Telegram forum topic / Discord message prefix)
+  --topic <NAME>   Topic name (Telegram forum topic / Discord message prefix / ntfy title)
 
 BACKENDS
   telegram         Telegram Bot API with forum topics (requires bot + group)
   discord-webhook  Discord webhook (just a URL, messages prefixed with [topic])
+  ntfy             ntfy push notifications (topic + optional token, title = pygmy topic)
 
 MESSAGES
   Messages are parsed as Markdown.
   Telegram: converted to HTML (bold, italic, code, links, blockquotes, lists).
   Discord: sent as-is (Discord renders Markdown natively).
-  Long messages are automatically split (4096 for Telegram, 2000 for Discord).
+  ntfy: sent as Markdown (rendered in web app; mobile shows raw text).
+  Long messages are automatically split (4096 for Telegram/ntfy, 2000 for Discord).
 
 CONFIG
   {config_dir}/config.toml       Backend credentials and enabled/disabled state
   {cache_dir}/topics.toml        Telegram topic name → thread ID cache (auto-managed)
 
 SETUP
-  Run `pygmy init telegram` or `pygmy init discord-webhook` for guided setup.
-  You can configure both — messages are sent to all enabled backends.
+  Run `pygmy init telegram`, `pygmy init discord-webhook`, or `pygmy init ntfy` for guided setup.
+  You can configure multiple — messages are sent to all enabled backends.
 "
     );
 

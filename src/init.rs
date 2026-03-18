@@ -3,8 +3,9 @@ use std::io::{self, Write};
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use crate::config::{self, DiscordWebhookConfig, TelegramConfig};
+use crate::config::{self, DiscordWebhookConfig, NtfyConfig, TelegramConfig};
 use crate::discord;
+use crate::ntfy;
 use crate::telegram;
 
 pub async fn run_telegram() -> Result<()> {
@@ -197,6 +198,82 @@ pub async fn run_discord_webhook() -> Result<()> {
     Ok(())
 }
 
+pub async fn run_ntfy() -> Result<()> {
+    println!();
+    println!("{} — set up ntfy push notifications", "pygmy".bold());
+    println!();
+
+    println!("{}", "Step 1: Subscribe to a topic".bold());
+    println!("1. Install the ntfy app on your phone (Android/iOS) or desktop");
+    println!("2. Subscribe to a topic — this will be your notification channel");
+    println!("3. Pick a hard-to-guess topic name if using the public ntfy.sh server");
+    println!("   (on ntfy.sh, anyone who knows the topic name can read/write to it)");
+    println!();
+
+    let server = prompt_with_default("Server URL", "https://ntfy.sh")?;
+    if server.is_empty() {
+        anyhow::bail!("Server URL cannot be empty.");
+    }
+    println!("{} Server: {}", "✓".green(), server);
+    println!();
+
+    let topic = prompt("ntfy topic name")?;
+    if topic.is_empty() {
+        anyhow::bail!("Topic name cannot be empty.");
+    }
+    println!("{} Topic: {}", "✓".green(), topic);
+    println!();
+
+    println!("{}", "Step 2: Authentication (optional)".bold());
+    println!("Leave blank unless you've configured access control for your topic.");
+    println!();
+
+    let token_input = prompt("Access token (press Enter to skip)")?;
+    let token = if token_input.is_empty() {
+        println!("{} No token (public access)", "✓".green());
+        None
+    } else {
+        println!("{} Token saved", "✓".green());
+        Some(token_input)
+    };
+    println!();
+
+    let ntfy_config = NtfyConfig {
+        enabled: true,
+        server: server.clone(),
+        topic: topic.clone(),
+        token: token.clone(),
+    };
+
+    println!("{}", "Step 3: Test".bold());
+    print!("Sending test notification...");
+    io::stdout().flush()?;
+
+    ntfy::send_message(
+        &ntfy_config,
+        "pygmy-test",
+        "pygmy is set up and working! 🎉",
+    )
+    .await
+    .context("Could not send test notification — check your server URL and topic.")?;
+
+    println!(
+        "\r{} Test notification sent! Check your ntfy app.",
+        "✓".green()
+    );
+    println!();
+
+    let mut cfg = config::load_config_or_default();
+    cfg.ntfy = Some(ntfy_config);
+    config::save_config(&cfg)?;
+
+    println!("{} ntfy is ready.", "Done.".green().bold());
+
+    print_snippet();
+
+    Ok(())
+}
+
 fn print_snippet() {
     println!();
     println!("Add the following to your CLAUDE.md or agent instructions:");
@@ -212,4 +289,17 @@ fn prompt(label: &str) -> Result<String> {
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     Ok(input.trim().to_string())
+}
+
+fn prompt_with_default(label: &str, default: &str) -> Result<String> {
+    print!("{} [{}]: ", label, default);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(trimmed.to_string())
+    }
 }

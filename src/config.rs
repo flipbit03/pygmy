@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub telegram: Option<TelegramConfig>,
     pub discord_webhook: Option<DiscordWebhookConfig>,
+    pub ntfy: Option<NtfyConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,6 +22,14 @@ pub struct TelegramConfig {
 pub struct DiscordWebhookConfig {
     pub enabled: bool,
     pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NtfyConfig {
+    pub enabled: bool,
+    pub server: String,
+    pub topic: String,
+    pub token: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -61,7 +70,7 @@ pub fn load_config() -> Result<Config> {
     let path = config_path()?;
     let data = std::fs::read_to_string(&path).with_context(|| {
         format!(
-            "could not read config at {}\nRun `pygmy init telegram` or `pygmy init discord-webhook` to set up.",
+            "could not read config at {}\nRun `pygmy init <backend>` to set up.",
             path.display()
         )
     })?;
