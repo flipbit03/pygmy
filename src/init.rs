@@ -29,7 +29,9 @@ pub async fn run() -> Result<()> {
     println!("{}", "Step 2: Create a Forum group".bold());
     println!("1. Create a new Telegram group (you can be the only member)");
     println!("2. Go to group settings → Topics → Enable");
-    println!("3. Add your bot to the group and make it admin (ensure \"Manage Topics\" is enabled)");
+    println!(
+        "3. Add your bot to the group and make it admin (ensure \"Manage Topics\" is enabled)"
+    );
     println!("4. Send /start in the group (important: must start with /)");
     println!();
     prompt("Press Enter once done...")?;
