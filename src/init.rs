@@ -225,8 +225,7 @@ pub async fn run_ntfy() -> Result<()> {
     println!();
 
     println!("{}", "Step 2: Authentication (optional)".bold());
-    println!("If your ntfy server requires authentication, enter a token.");
-    println!("The public ntfy.sh server does not require a token.");
+    println!("Leave blank unless you've configured access control for your topic.");
     println!();
 
     let token_input = prompt("Access token (press Enter to skip)")?;
