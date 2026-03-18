@@ -70,7 +70,7 @@ pub fn load_config() -> Result<Config> {
     let path = config_path()?;
     let data = std::fs::read_to_string(&path).with_context(|| {
         format!(
-            "could not read config at {}\nRun `pygmy init telegram`, `pygmy init discord-webhook`, or `pygmy init ntfy` to set up.",
+            "could not read config at {}\nRun `pygmy init <backend>` to set up.",
             path.display()
         )
     })?;

@@ -20,7 +20,7 @@ pub async fn send(topic: &str, message: &str) -> Result<()> {
     if !telegram_enabled && !discord_enabled && !ntfy_enabled {
         anyhow::bail!(
             "No notification backends are enabled.\n\
-             Run `pygmy init telegram`, `pygmy init discord-webhook`, or `pygmy init ntfy` to set one up,\n\
+             Run `pygmy init <backend>` to set one up,\n\
              or `pygmy enable <backend>` to re-enable a configured one."
         );
     }

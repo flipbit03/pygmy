@@ -138,12 +138,7 @@ fn run_status() -> anyhow::Result<()> {
         Ok(c) => c,
         Err(_) => {
             println!("No backends configured.");
-            println!(
-                "Run {}, {}, or {} to get started.",
-                "pygmy init telegram".bold(),
-                "pygmy init discord-webhook".bold(),
-                "pygmy init ntfy".bold()
-            );
+            println!("Run {} to get started.", "pygmy init <backend>".bold());
             return Ok(());
         }
     };

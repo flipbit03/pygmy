@@ -108,7 +108,7 @@ After setup, add this to your `CLAUDE.md` (or equivalent agent instructions file
 ~~~markdown
 ## Notifications (pygmy)
 
-Use `pygmy` to notify me. Messages are Markdown, sent to all configured backends (Telegram, Discord, ntfy, etc.).
+Use `pygmy` to notify me. Messages are Markdown, sent to all enabled backends.
 
 **When to use:**
 - When I say "ping me", "notify me", or "let me know when done"
