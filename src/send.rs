@@ -86,7 +86,8 @@ async fn send_discord(
     topic: &str,
     message: &str,
 ) -> Result<()> {
-    let prefixed = format!("**[{topic}]**\n{message}");
+    let converted = markdown::to_discord_markdown(message);
+    let prefixed = format!("**[{topic}]**\n{converted}");
     let chunks = chunk_message(&prefixed, DISCORD_MAX_LENGTH);
 
     for chunk in &chunks {
