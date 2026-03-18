@@ -7,35 +7,41 @@ pub async fn run() {
 
     print!(
         "\
-pygmy {version} — Telegram notifications from AI agents
+pygmy {version} — notifications from AI agents
 
 USAGE
-  pygmy --topic <TOPIC> <MESSAGE>         Send a message to a topic
-  pygmy --topic <TOPIC> --stdin           Read message from stdin
-  echo \"...\" | pygmy --topic <TOPIC>      Pipe message from stdin
-  pygmy init                              Guided setup (Telegram bot + group)
-  pygmy self update                       Update to latest version
-  pygmy self update --check               Check for updates without installing
-  pygmy usage                             Show this reference
+  pygmy --topic <TOPIC> <MESSAGE>           Send to all enabled backends
+  pygmy --topic <TOPIC> --stdin             Read message from stdin
+  echo \"...\" | pygmy --topic <TOPIC>        Pipe message from stdin
+  pygmy init telegram                       Set up Telegram bot + group
+  pygmy init discord-webhook                Set up Discord webhook
+  pygmy enable <BACKEND>                    Enable a configured backend
+  pygmy disable <BACKEND>                   Disable a configured backend
+  pygmy status                              Show configured backends
+  pygmy self update                         Update to latest version
+  pygmy self update --check                 Check for updates without installing
+  pygmy usage                               Show this reference
 
 OPTIONS
-  --topic <NAME>   Forum topic name (created automatically on first use)
+  --topic <NAME>   Topic name (Telegram forum topic / Discord message prefix)
+
+BACKENDS
+  telegram         Telegram Bot API with forum topics (requires bot + group)
+  discord-webhook  Discord webhook (just a URL, messages prefixed with [topic])
 
 MESSAGES
-  Messages are parsed as Markdown and converted to Telegram HTML.
-  Supports: **bold**, *italic*, `code`, ```code blocks```, [links](url),
-  ~~strikethrough~~, > blockquotes, headings, and lists.
-  Messages over 4096 characters are automatically split.
+  Messages are parsed as Markdown.
+  Telegram: converted to HTML (bold, italic, code, links, blockquotes, lists).
+  Discord: sent as-is (Discord renders Markdown natively).
+  Long messages are automatically split (4096 for Telegram, 2000 for Discord).
 
 CONFIG
-  {config_dir}/config.toml       Bot token and group ID
-  {cache_dir}/topics.toml        Topic name → thread ID cache (auto-managed)
+  {config_dir}/config.toml       Backend credentials and enabled/disabled state
+  {cache_dir}/topics.toml        Telegram topic name → thread ID cache (auto-managed)
 
 SETUP
-  Run `pygmy init` for guided setup. You will need:
-  1. A Telegram bot (create via @BotFather)
-  2. A Telegram group with Topics enabled
-  3. The bot added as admin in the group
+  Run `pygmy init telegram` or `pygmy init discord-webhook` for guided setup.
+  You can configure both — messages are sent to all enabled backends.
 "
     );
 

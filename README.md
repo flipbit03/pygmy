@@ -1,4 +1,4 @@
-# pygmy 
+# pygmy
 
 */ˈpɪŋ.miː/*
 
@@ -6,11 +6,11 @@
 [![crates.io](https://img.shields.io/crates/v/pygmy)](https://crates.io/crates/pygmy)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-`pygmy` lets AI coding agents (Claude Code, etc.) send you Telegram notifications when they finish a task, hit a blocker, or need your attention. You get a ping on your phone and come back when you're ready.
+`pygmy` lets AI coding agents (Claude Code, etc.) send you notifications when they finish a task, hit a blocker, or need your attention. You get a ping on your phone/desktop and come back when you're ready.
 
-Notification is unidirectional - the agent can't read your replies on Telegram, so it's just a simple "ping" to draw you back to the agent's interface, when needed.
+Supports **Telegram** (forum topics) and **Discord** (webhooks). Configure one or both — messages are sent to all enabled backends.
 
-Each agent session gets its own Telegram forum topic, so parallel sessions stay organized.
+Notification is unidirectional — the agent can't read your replies, so it's just a simple "ping" to draw you back to the agent's interface.
 
 ## Install
 
@@ -26,7 +26,22 @@ cargo install pygmy
 
 ## Setup
 
-Run `pygmy init` and follow the instructions. It will walk you through creating a Telegram bot, setting up a forum group, and testing the connection. You'll need to do this once. After that, just copy the generated config file (`~/.config/pygmy/config.toml`) to any machine where you run agents and want notifications.
+Run `pygmy init <backend>` and follow the instructions:
+
+```bash
+pygmy init telegram          # Telegram bot + forum group
+pygmy init discord-webhook   # Discord webhook (simplest)
+```
+
+You can set up both. After setup, copy the config file (`~/.config/pygmy/config.toml`) to any machine where you run agents.
+
+### Managing backends
+
+```bash
+pygmy status                   # Show what's configured and enabled
+pygmy disable telegram         # Temporarily disable a backend
+pygmy enable telegram          # Re-enable it
+```
 
 ## Usage
 
@@ -46,10 +61,11 @@ pygmy --topic "investigation" --stdin <<'EOF'
 EOF
 ```
 
-Messages are Markdown, automatically converted to Telegram HTML. Topics are created on first use — no manual setup needed.
+Messages are Markdown. Telegram messages are converted to HTML; Discord messages are sent as-is (Discord renders Markdown natively). Topics are created on first use — no manual setup needed.
 
-### What it looks like in Telegram
+### What it looks like
 
+**Telegram** — each topic is a separate forum thread:
 ```
 📂 Pygmy Notifications (Telegram Group)
   ├─ 💬 CAD-1234 auth refactor
@@ -59,19 +75,27 @@ Messages are Markdown, automatically converted to Telegram HTML. Topics are crea
   │    "Build failed"
   │
   └─ 💬 investigation
-       "I need your attention. Found 3 issues: ..."
+       "Found 3 issues: ..."
 ```
 
-Each topic is a separate thread with its own notifications.
+**Discord** — messages are prefixed with the topic name:
+```
+#pygmy-notifications (Discord Channel)
+  ┊ **[CAD-1234 auth refactor]**
+  ┊ Done. PR #47 ready for review.
+  ┊
+  ┊ **[deploy]**
+  ┊ Build failed
+```
 
 ## Agent integration
 
-After setting everything up, add this to your `CLAUDE.md` (or equivalent agent instructions file). `pygmy init` prints this snippet for you at the end of setup.
+After setup, add this to your `CLAUDE.md` (or equivalent agent instructions file). `pygmy init` prints this snippet for you.
 
 ~~~markdown
 ## Notifications (pygmy)
 
-Use `pygmy` to notify me via Telegram. Messages are Markdown, converted to Telegram HTML.
+Use `pygmy` to notify me. Messages are Markdown, sent to all configured backends (Telegram, Discord, etc.).
 
 **When to use:**
 - When I say "ping me", "notify me", or "let me know when done"

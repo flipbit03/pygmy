@@ -1,4 +1,5 @@
 mod config;
+mod discord;
 mod init;
 mod markdown;
 mod self_update;
@@ -10,15 +11,16 @@ mod version_check;
 use std::io::{IsTerminal, Read};
 
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 
-/// pygmy — Telegram notifications from AI agents
+/// pygmy — notifications from AI agents
 #[derive(Debug, Parser)]
 #[command(name = "pygmy", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Forum topic name (auto-created on first use).
+    /// Topic name (used as Telegram forum topic / Discord message prefix).
     #[arg(long, global = true)]
     topic: Option<String>,
 
@@ -32,8 +34,23 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Guided setup for Telegram bot and group.
-    Init,
+    /// Set up a notification backend.
+    Init {
+        #[command(subcommand)]
+        backend: InitBackend,
+    },
+    /// Enable a configured backend.
+    Enable {
+        /// Backend name: telegram, discord-webhook
+        backend: String,
+    },
+    /// Disable a configured backend.
+    Disable {
+        /// Backend name: telegram, discord-webhook
+        backend: String,
+    },
+    /// Show configured backends and their status.
+    Status,
     /// Print a compact LLM-friendly command reference.
     Usage,
     /// Manage pygmy itself (update, etc.).
@@ -41,12 +58,26 @@ enum Command {
     SelfCmd(self_update::SelfCmd),
 }
 
+#[derive(Debug, Subcommand)]
+enum InitBackend {
+    /// Set up Telegram bot and forum group.
+    Telegram,
+    /// Set up Discord webhook notifications.
+    DiscordWebhook,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Some(Command::Init) => init::run().await,
+        Some(Command::Init { backend }) => match backend {
+            InitBackend::Telegram => init::run_telegram().await,
+            InitBackend::DiscordWebhook => init::run_discord_webhook().await,
+        },
+        Some(Command::Enable { backend }) => run_toggle(&backend, true),
+        Some(Command::Disable { backend }) => run_toggle(&backend, false),
+        Some(Command::Status) => run_status(),
         Some(Command::Usage) => {
             usage::run().await;
             return;
@@ -59,6 +90,98 @@ async fn main() {
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
     }
+}
+
+fn run_toggle(backend: &str, enable: bool) -> anyhow::Result<()> {
+    let mut cfg = config::load_config()?;
+    let action = if enable { "enabled" } else { "disabled" };
+
+    match backend {
+        "telegram" => {
+            let tg = cfg.telegram.as_mut().ok_or_else(|| {
+                anyhow::anyhow!("Telegram is not configured. Run `pygmy init telegram` first.")
+            })?;
+            tg.enabled = enable;
+        }
+        "discord-webhook" => {
+            let dw = cfg.discord_webhook.as_mut().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Discord webhook is not configured. Run `pygmy init discord-webhook` first."
+                )
+            })?;
+            dw.enabled = enable;
+        }
+        _ => {
+            anyhow::bail!("Unknown backend: {backend}\nAvailable: telegram, discord-webhook");
+        }
+    }
+
+    config::save_config(&cfg)?;
+    println!("{} {backend} {action}.", "✓".green());
+    Ok(())
+}
+
+fn run_status() -> anyhow::Result<()> {
+    let cfg = config::load_config();
+
+    let cfg = match cfg {
+        Ok(c) => c,
+        Err(_) => {
+            println!("No backends configured.");
+            println!(
+                "Run {} or {} to get started.",
+                "pygmy init telegram".bold(),
+                "pygmy init discord-webhook".bold()
+            );
+            return Ok(());
+        }
+    };
+
+    println!("{}", "pygmy — notification backends".bold());
+    println!();
+
+    match &cfg.telegram {
+        Some(tg) if tg.enabled => {
+            println!(
+                "  {} {}  (group: {})",
+                "✓".green(),
+                "telegram".bold(),
+                tg.group_id
+            );
+        }
+        Some(_) => {
+            println!("  {} {}  (disabled)", "✗".red(), "telegram".bold());
+        }
+        None => {
+            println!(
+                "  {} {}  (not configured)",
+                "−".dimmed(),
+                "telegram".dimmed()
+            );
+        }
+    }
+
+    match &cfg.discord_webhook {
+        Some(dw) if dw.enabled => {
+            println!(
+                "  {} {}  (webhook configured)",
+                "✓".green(),
+                "discord-webhook".bold()
+            );
+        }
+        Some(_) => {
+            println!("  {} {}  (disabled)", "✗".red(), "discord-webhook".bold());
+        }
+        None => {
+            println!(
+                "  {} {}  (not configured)",
+                "−".dimmed(),
+                "discord-webhook".dimmed()
+            );
+        }
+    }
+
+    Ok(())
 }
 
 async fn run_send(cli: &Cli) -> anyhow::Result<()> {

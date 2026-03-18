@@ -1,19 +1,66 @@
 use anyhow::Result;
 
 use crate::config;
+use crate::discord;
 use crate::markdown;
 use crate::telegram;
 
 const TELEGRAM_MAX_LENGTH: usize = 4096;
+const DISCORD_MAX_LENGTH: usize = 2000;
 
 pub async fn send(topic: &str, message: &str) -> Result<()> {
     let config = config::load_config()?;
-    let token = &config.telegram.bot_token;
-    let group_id = &config.telegram.group_id;
+
+    let telegram_enabled = config.telegram.as_ref().is_some_and(|t| t.enabled);
+    let discord_enabled = config.discord_webhook.as_ref().is_some_and(|d| d.enabled);
+
+    if !telegram_enabled && !discord_enabled {
+        anyhow::bail!(
+            "No notification backends are enabled.\n\
+             Run `pygmy init telegram` or `pygmy init discord-webhook` to set one up,\n\
+             or `pygmy enable <backend>` to re-enable a configured one."
+        );
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut any_success = false;
+
+    if let Some(tg) = &config.telegram
+        && tg.enabled
+    {
+        match send_telegram(tg, topic, message).await {
+            Ok(()) => any_success = true,
+            Err(e) => errors.push(format!("telegram: {e:#}")),
+        }
+    }
+
+    if let Some(dw) = &config.discord_webhook
+        && dw.enabled
+    {
+        match send_discord(dw, topic, message).await {
+            Ok(()) => any_success = true,
+            Err(e) => errors.push(format!("discord-webhook: {e:#}")),
+        }
+    }
+
+    for err in &errors {
+        eprintln!("Warning: {err}");
+    }
+
+    if any_success {
+        Ok(())
+    } else {
+        anyhow::bail!("All backends failed.")
+    }
+}
+
+async fn send_telegram(config: &config::TelegramConfig, topic: &str, message: &str) -> Result<()> {
+    let token = &config.bot_token;
+    let group_id = &config.group_id;
 
     let mut thread_id = resolve_topic(token, group_id, topic).await?;
     let html = markdown::to_telegram_html(message);
-    let chunks = chunk_message(&html);
+    let chunks = chunk_message(&html, TELEGRAM_MAX_LENGTH);
 
     let first_result = telegram::send_message(token, group_id, &chunks[0], Some(thread_id)).await;
 
@@ -29,6 +76,21 @@ pub async fn send(topic: &str, message: &str) -> Result<()> {
 
     for chunk in &chunks[1..] {
         telegram::send_message(token, group_id, chunk, Some(thread_id)).await?;
+    }
+
+    Ok(())
+}
+
+async fn send_discord(
+    config: &config::DiscordWebhookConfig,
+    topic: &str,
+    message: &str,
+) -> Result<()> {
+    let prefixed = format!("**[{topic}]**\n{message}");
+    let chunks = chunk_message(&prefixed, DISCORD_MAX_LENGTH);
+
+    for chunk in &chunks {
+        discord::send_message(&config.url, chunk).await?;
     }
 
     Ok(())
@@ -59,8 +121,8 @@ async fn resolve_topic(token: &str, group_id: &str, topic: &str) -> Result<i64> 
     Ok(thread_id)
 }
 
-fn chunk_message(text: &str) -> Vec<String> {
-    if text.len() <= TELEGRAM_MAX_LENGTH {
+fn chunk_message(text: &str, max_length: usize) -> Vec<String> {
+    if text.len() <= max_length {
         return vec![text.to_string()];
     }
 
@@ -68,16 +130,16 @@ fn chunk_message(text: &str) -> Vec<String> {
     let mut remaining = text;
 
     while !remaining.is_empty() {
-        if remaining.len() <= TELEGRAM_MAX_LENGTH {
+        if remaining.len() <= max_length {
             chunks.push(remaining.to_string());
             break;
         }
 
         // Find a line break near the limit to split on.
-        let split_at = remaining[..TELEGRAM_MAX_LENGTH]
+        let split_at = remaining[..max_length]
             .rfind('\n')
             .map(|i| i + 1) // include the newline in the current chunk
-            .unwrap_or(TELEGRAM_MAX_LENGTH);
+            .unwrap_or(max_length);
 
         chunks.push(remaining[..split_at].to_string());
         remaining = &remaining[split_at..];
@@ -92,21 +154,40 @@ mod tests {
 
     #[test]
     fn short_message_not_chunked() {
-        let chunks = chunk_message("hello");
+        let chunks = chunk_message("hello", TELEGRAM_MAX_LENGTH);
         assert_eq!(chunks, vec!["hello"]);
     }
 
     #[test]
-    fn long_message_splits_on_newline() {
+    fn long_message_splits_on_newline_telegram() {
         let line = "a".repeat(100);
         let text = (0..50)
             .map(|_| line.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        let chunks = chunk_message(&text);
+        let chunks = chunk_message(&text, TELEGRAM_MAX_LENGTH);
         assert!(chunks.len() > 1);
         for chunk in &chunks {
             assert!(chunk.len() <= TELEGRAM_MAX_LENGTH);
         }
+    }
+
+    #[test]
+    fn long_message_splits_on_newline_discord() {
+        let line = "a".repeat(100);
+        let text = (0..30)
+            .map(|_| line.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let chunks = chunk_message(&text, DISCORD_MAX_LENGTH);
+        assert!(chunks.len() > 1);
+        for chunk in &chunks {
+            assert!(chunk.len() <= DISCORD_MAX_LENGTH);
+        }
+    }
+
+    #[test]
+    fn discord_chunk_limit_is_2000() {
+        assert_eq!(DISCORD_MAX_LENGTH, 2000);
     }
 }

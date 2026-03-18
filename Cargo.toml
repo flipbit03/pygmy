@@ -2,7 +2,7 @@
 name = "pygmy"
 version = "0.0.0"
 edition = "2024"
-description = "Ping me — Telegram notifications from AI agents"
+description = "Ping me — notifications from AI agents (Telegram, Discord)"
 license = "MIT"
 repository = "https://github.com/flipbit03/pygmy"
 
