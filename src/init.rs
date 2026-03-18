@@ -3,12 +3,13 @@ use std::io::{self, Write};
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use crate::config::{self, Config, TelegramConfig};
+use crate::config::{self, DiscordWebhookConfig, TelegramConfig};
+use crate::discord;
 use crate::telegram;
 
-pub async fn run() -> Result<()> {
+pub async fn run_telegram() -> Result<()> {
     println!();
-    println!("{} — Telegram notifications from AI agents", "pygmy".bold());
+    println!("{} — set up Telegram notifications", "pygmy".bold());
     println!();
 
     println!("{}", "Step 1: Create a Telegram bot".bold());
@@ -29,7 +30,9 @@ pub async fn run() -> Result<()> {
     println!("{}", "Step 2: Create a Forum group".bold());
     println!("1. Create a new Telegram group (you can be the only member)");
     println!("2. Go to group settings → Topics → Enable");
-    println!("3. Add your bot to the group and make it admin (ensure \"Manage Topics\" is enabled)");
+    println!(
+        "3. Add your bot to the group and make it admin (ensure \"Manage Topics\" is enabled)"
+    );
     println!("4. Send /start in the group (important: must start with /)");
     println!();
     prompt("Press Enter once done...")?;
@@ -71,7 +74,7 @@ pub async fn run() -> Result<()> {
              1. Added the bot to a group\n\
              2. Sent /start in the group (regular messages are invisible to bots)\n\
              3. The group has Topics enabled\n\
-             Then run `pygmy init` again."
+             Then run `pygmy init telegram` again."
         );
     }
 
@@ -99,13 +102,13 @@ pub async fn run() -> Result<()> {
         (*id, title.clone())
     };
 
-    let config = Config {
-        telegram: TelegramConfig {
-            bot_token: bot_token.clone(),
-            group_id: group_id.to_string(),
-        },
-    };
-    config::save_config(&config)?;
+    let mut cfg = config::load_config_or_default();
+    cfg.telegram = Some(TelegramConfig {
+        enabled: true,
+        bot_token: bot_token.clone(),
+        group_id: group_id.to_string(),
+    });
+    config::save_config(&cfg)?;
     println!();
 
     println!("{}", "Step 3: Test".bold());
@@ -135,15 +138,72 @@ pub async fn run() -> Result<()> {
         group_title
     );
     println!();
-    println!("{} pygmy is ready.", "Done.".green().bold());
+    println!("{} Telegram is ready.", "Done.".green().bold());
+
+    print_snippet();
+
+    Ok(())
+}
+
+pub async fn run_discord_webhook() -> Result<()> {
+    println!();
+    println!("{} — set up Discord webhook notifications", "pygmy".bold());
+    println!();
+
+    println!("{}", "Step 1: Create a Discord webhook".bold());
+    println!("1. Open Discord and go to the channel you want notifications in");
+    println!("2. Click the gear icon (Edit Channel) → Integrations → Webhooks");
+    println!("3. Click \"New Webhook\", give it a name (e.g. \"pygmy\")");
+    println!("4. Click \"Copy Webhook URL\"");
+    println!();
+
+    let url = prompt("Paste your webhook URL")?;
+    if url.is_empty() {
+        anyhow::bail!("Webhook URL cannot be empty.");
+    }
+    if !url.starts_with("https://discord.com/api/webhooks/")
+        && !url.starts_with("https://discordapp.com/api/webhooks/")
+    {
+        anyhow::bail!(
+            "That doesn't look like a Discord webhook URL.\n\
+             Expected: https://discord.com/api/webhooks/..."
+        );
+    }
+    println!("{} Webhook URL saved", "✓".green());
+    println!();
+
+    println!("{}", "Step 2: Test".bold());
+    print!("Sending test message...");
+    io::stdout().flush()?;
+
+    discord::send_message(&url, "**[pygmy-test]**\npygmy is set up and working! 🎉")
+        .await
+        .context("Could not send test message — check your webhook URL.")?;
+
+    println!(
+        "\r{} Test message delivered! Check your Discord channel.",
+        "✓".green()
+    );
+    println!();
+
+    let mut cfg = config::load_config_or_default();
+    cfg.discord_webhook = Some(DiscordWebhookConfig { enabled: true, url });
+    config::save_config(&cfg)?;
+
+    println!("{} Discord webhook is ready.", "Done.".green().bold());
+
+    print_snippet();
+
+    Ok(())
+}
+
+fn print_snippet() {
     println!();
     println!("Add the following to your CLAUDE.md or agent instructions:");
     println!();
     println!("---");
     print!("{}", include_str!("pygmy_claude_snippet.md"));
     println!("---");
-
-    Ok(())
 }
 
 fn prompt(label: &str) -> Result<String> {

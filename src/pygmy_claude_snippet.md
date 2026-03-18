@@ -1,6 +1,6 @@
 ## Notifications (pygmy)
 
-Use `pygmy` to notify me via Telegram. Messages are Markdown, converted to Telegram HTML.
+Use `pygmy` to notify me. Messages are Markdown, sent to all configured backends (Telegram, Discord, etc.).
 
 **When to use:**
 - When I say "ping me", "notify me", or "let me know when done"

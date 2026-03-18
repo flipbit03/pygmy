@@ -4,15 +4,23 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {
-    pub telegram: TelegramConfig,
+    pub telegram: Option<TelegramConfig>,
+    pub discord_webhook: Option<DiscordWebhookConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TelegramConfig {
+    pub enabled: bool,
     pub bot_token: String,
     pub group_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiscordWebhookConfig {
+    pub enabled: bool,
+    pub url: String,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -53,11 +61,16 @@ pub fn load_config() -> Result<Config> {
     let path = config_path()?;
     let data = std::fs::read_to_string(&path).with_context(|| {
         format!(
-            "could not read config at {}\nRun `pygmy init` to set up.",
+            "could not read config at {}\nRun `pygmy init telegram` or `pygmy init discord-webhook` to set up.",
             path.display()
         )
     })?;
     toml::from_str(&data).context("invalid config format")
+}
+
+/// Load existing config or return an empty default (for init flows that merge).
+pub fn load_config_or_default() -> Config {
+    load_config().unwrap_or_default()
 }
 
 pub fn save_config(config: &Config) -> Result<()> {
