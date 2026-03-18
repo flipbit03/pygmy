@@ -2,6 +2,7 @@ mod config;
 mod discord;
 mod init;
 mod markdown;
+mod ntfy;
 mod self_update;
 mod send;
 mod telegram;
@@ -20,7 +21,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Topic name (used as Telegram forum topic / Discord message prefix).
+    /// Topic name (used as Telegram forum topic / Discord message prefix / ntfy notification title).
     #[arg(long, global = true)]
     topic: Option<String>,
 
@@ -41,12 +42,12 @@ enum Command {
     },
     /// Enable a configured backend.
     Enable {
-        /// Backend name: telegram, discord-webhook
+        /// Backend name: telegram, discord-webhook, ntfy
         backend: String,
     },
     /// Disable a configured backend.
     Disable {
-        /// Backend name: telegram, discord-webhook
+        /// Backend name: telegram, discord-webhook, ntfy
         backend: String,
     },
     /// Show configured backends and their status.
@@ -64,6 +65,8 @@ enum InitBackend {
     Telegram,
     /// Set up Discord webhook notifications.
     DiscordWebhook,
+    /// Set up ntfy push notifications.
+    Ntfy,
 }
 
 #[tokio::main]
@@ -74,6 +77,7 @@ async fn main() {
         Some(Command::Init { backend }) => match backend {
             InitBackend::Telegram => init::run_telegram().await,
             InitBackend::DiscordWebhook => init::run_discord_webhook().await,
+            InitBackend::Ntfy => init::run_ntfy().await,
         },
         Some(Command::Enable { backend }) => run_toggle(&backend, true),
         Some(Command::Disable { backend }) => run_toggle(&backend, false),
@@ -111,8 +115,14 @@ fn run_toggle(backend: &str, enable: bool) -> anyhow::Result<()> {
             })?;
             dw.enabled = enable;
         }
+        "ntfy" => {
+            let n = cfg.ntfy.as_mut().ok_or_else(|| {
+                anyhow::anyhow!("ntfy is not configured. Run `pygmy init ntfy` first.")
+            })?;
+            n.enabled = enable;
+        }
         _ => {
-            anyhow::bail!("Unknown backend: {backend}\nAvailable: telegram, discord-webhook");
+            anyhow::bail!("Unknown backend: {backend}\nAvailable: telegram, discord-webhook, ntfy");
         }
     }
 
@@ -129,9 +139,10 @@ fn run_status() -> anyhow::Result<()> {
         Err(_) => {
             println!("No backends configured.");
             println!(
-                "Run {} or {} to get started.",
+                "Run {}, {}, or {} to get started.",
                 "pygmy init telegram".bold(),
-                "pygmy init discord-webhook".bold()
+                "pygmy init discord-webhook".bold(),
+                "pygmy init ntfy".bold()
             );
             return Ok(());
         }
@@ -178,6 +189,24 @@ fn run_status() -> anyhow::Result<()> {
                 "−".dimmed(),
                 "discord-webhook".dimmed()
             );
+        }
+    }
+
+    match &cfg.ntfy {
+        Some(n) if n.enabled => {
+            println!(
+                "  {} {}  (topic: {}, server: {})",
+                "✓".green(),
+                "ntfy".bold(),
+                n.topic,
+                n.server
+            );
+        }
+        Some(_) => {
+            println!("  {} {}  (disabled)", "✗".red(), "ntfy".bold());
+        }
+        None => {
+            println!("  {} {}  (not configured)", "−".dimmed(), "ntfy".dimmed());
         }
     }
 

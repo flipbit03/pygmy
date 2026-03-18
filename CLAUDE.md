@@ -26,6 +26,7 @@ src/
 ├── config.rs         # ~/.config/pygmy/config.toml + ~/.cache/pygmy/topics.toml
 ├── telegram.rs       # Raw reqwest calls to Telegram Bot API (3 endpoints, no SDK)
 ├── discord.rs        # Raw reqwest call to Discord webhook API (1 endpoint)
+├── ntfy.rs           # Raw reqwest call to ntfy API (1 endpoint, optional auth)
 ├── markdown.rs       # pulldown-cmark event filtering → Telegram HTML subset
 ├── send.rs           # Multi-backend fan-out, topic resolution, message chunking
 ├── init.rs           # Guided interactive setup (telegram / discord-webhook)
@@ -37,15 +38,17 @@ src/
 
 ## Key Design Decisions
 
-**Multi-backend architecture**: pygmy supports multiple notification backends (Telegram, Discord webhook). Config has optional sections for each backend with an `enabled` flag. The send flow fans out to all enabled backends — returns success if any succeed, warns on stderr for failures.
+**Multi-backend architecture**: pygmy supports multiple notification backends (Telegram, Discord webhook, ntfy). Config has optional sections for each backend with an `enabled` flag. The send flow fans out to all enabled backends — returns success if any succeed, warns on stderr for failures.
 
 **Telegram API**: Only 3 endpoints — `sendMessage`, `createForumTopic`, `getUpdates`. Direct `reqwest` calls, no Telegram SDK. Keep it this way.
 
 **Discord Webhook API**: Single POST to the webhook URL with `{ "content": "..." }`. Messages are prefixed with `**[topic-name]**` on a separate line. Discord renders Markdown natively, so raw markdown is sent as-is (no HTML conversion). Message limit is 2000 chars.
 
+**ntfy API**: Single POST to `{server}/{topic}` with raw markdown body. Headers: `Markdown: yes`, `Title: {pygmy-topic}`, and optional `Authorization: Bearer {token}`. Stateless — no topic creation or caching needed. Pygmy's `--topic` maps to the `Title` header. The ntfy topic in config is the "channel" (analogous to a Telegram group). Message limit is 4096 bytes.
+
 **Markdown → HTML (Telegram only)**: `pulldown-cmark` event-based parser, filtered to emit only Telegram-supported tags (`<b>`, `<i>`, `<s>`, `<code>`, `<pre>`, `<a>`, `<blockquote>`). Unsupported elements degrade to plain text (headings → bold, lists → unicode bullets). Discord gets raw markdown.
 
-**Topic handling**: For Telegram, topics map to forum threads via `createForumTopic` with caching. For Discord, topics are simply a bold `[topic-name]` prefix on the message.
+**Topic handling**: For Telegram, topics map to forum threads via `createForumTopic` with caching. For Discord, topics are simply a bold `[topic-name]` prefix on the message. For ntfy, topics map to the `Title` header on the notification (stateless, no cache).
 
 **Topic cache**: Telegram's `createForumTopic` always creates a new topic even if one with the same name exists (duplicates). The cache in `~/.cache/pygmy/topics.toml` maps topic names to `message_thread_id`. If a cached topic is deleted on Telegram's side, `send.rs` detects the "thread not found" error, evicts the cache entry, recreates the topic, and retries.
 
@@ -70,6 +73,13 @@ src/
 - No bot setup, no permissions, no admin — just create a webhook in channel settings and paste the URL.
 - Discord message limit is 2000 chars. `send.rs` chunks on line boundaries.
 - Discord renders Markdown natively, so no conversion is needed.
+
+### ntfy
+- On the public `ntfy.sh` server, the topic name is effectively a password — anyone who knows it can read/write. Init warns users to pick hard-to-guess names.
+- Markdown rendering is web app only — mobile apps show raw text, which is still readable.
+- Message limit is 4096 bytes. `send.rs` chunks on line boundaries (same as Telegram).
+- Optional bearer token auth for self-hosted instances with ACLs. Public ntfy.sh needs no auth.
+- Server URL is configurable, defaults to `https://ntfy.sh` during init.
 
 ## CI/CD
 
