@@ -1,5 +1,9 @@
 # pygmy — Development Guide
 
+## Workflow
+
+**Never commit directly to main.** Always create a branch and open a PR.
+
 ## Quick Reference
 
 ```bash
