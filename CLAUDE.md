@@ -4,6 +4,8 @@
 
 **Never commit directly to main.** Always create a branch and open a PR.
 
+**After every change**, re-check and update documentation — including `README.md` (which serves as the ad-hoc user-facing docs) and this `CLAUDE.md`. Keep them in sync with the code.
+
 ## Quick Reference
 
 ```bash
@@ -62,7 +64,7 @@ src/
 
 ### Telegram
 - Bot needs **admin** on the channel to post messages. Add the bot as an admin when creating the channel.
-- `getUpdates` also returns `my_chat_member` events (when bot is added to a channel) — `init` checks both `message` and `my_chat_member` to discover channels.
+- `getUpdates` returns `channel_post` (messages in the channel) and `my_chat_member` events (when bot is added as admin) — `init` checks both to discover channels.
 - Telegram message limit is 4096 chars. `send.rs` chunks on line boundaries.
 
 ### Discord Webhook
