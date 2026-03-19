@@ -8,7 +8,7 @@
 
 `pygmy` lets AI coding agents (Claude Code, etc.) send you notifications when they finish a task, hit a blocker, or need your attention. You get a ping on your phone/desktop and come back when you're ready.
 
-Supports **Telegram** (forum topics), **Discord** (webhooks), and **[ntfy](https://ntfy.sh)** (push notifications). Configure one or more — messages are sent to all enabled backends.
+Supports **Telegram** (channel), **Discord** (webhooks), and **[ntfy](https://ntfy.sh)** (push notifications). Configure one or more — messages are sent to all enabled backends.
 
 Notification is unidirectional — the agent can't read your replies, so it's just a simple "ping" to draw you back to the agent's interface.
 
@@ -29,7 +29,7 @@ cargo install pygmy
 Run `pygmy init <backend>` and follow the instructions:
 
 ```bash
-pygmy init telegram          # Telegram bot + forum group
+pygmy init telegram          # Telegram bot + channel
 pygmy init discord-webhook   # Discord webhook
 pygmy init ntfy              # ntfy push notifications (simplest)
 ```
@@ -62,21 +62,18 @@ pygmy --topic "investigation" --stdin <<'EOF'
 EOF
 ```
 
-Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy messages are sent as-is (both render Markdown natively). Topics are created on first use — no manual setup needed.
+Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy messages are sent as-is (both render Markdown natively).
 
 ### What it looks like
 
-**Telegram** — each topic is a separate forum thread:
+**Telegram** — messages are prefixed with the topic name:
 ```
-📂 Pygmy Notifications (Telegram Group)
-  ├─ 💬 CAD-1234 auth refactor
-  │    "Done. PR #47 ready for review."
-  │
-  ├─ 💬 deploy
-  │    "Build failed"
-  │
-  └─ 💬 investigation
-       "Found 3 issues: ..."
+📢 Pygmy Notifications (Telegram Channel)
+  ┊ [CAD-1234 auth refactor]
+  ┊ Done. PR #47 ready for review.
+  ┊
+  ┊ [deploy]
+  ┊ Build failed
 ```
 
 **Discord** — messages are prefixed with the topic name:

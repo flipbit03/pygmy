@@ -3,7 +3,6 @@ use crate::version_check;
 pub async fn run() {
     let version = version_check::current_version();
     let config_dir = crate::config::config_dir_display();
-    let cache_dir = crate::config::cache_dir_display();
 
     print!(
         "\
@@ -13,7 +12,7 @@ USAGE
   pygmy --topic <TOPIC> <MESSAGE>           Send to all enabled backends
   pygmy --topic <TOPIC> --stdin             Read message from stdin
   echo \"...\" | pygmy --topic <TOPIC>        Pipe message from stdin
-  pygmy init telegram                       Set up Telegram bot + group
+  pygmy init telegram                       Set up Telegram bot + channel
   pygmy init discord-webhook                Set up Discord webhook
   pygmy init ntfy                           Set up ntfy push notifications
   pygmy enable <BACKEND>                    Enable a configured backend
@@ -24,10 +23,10 @@ USAGE
   pygmy usage                               Show this reference
 
 OPTIONS
-  --topic <NAME>   Topic name (Telegram forum topic / Discord message prefix / ntfy title)
+  --topic <NAME>   Topic name (Telegram/Discord message prefix / ntfy title)
 
 BACKENDS
-  telegram         Telegram Bot API with forum topics (requires bot + group)
+  telegram         Telegram Bot API with channel (requires bot + channel)
   discord-webhook  Discord webhook (just a URL, messages prefixed with [topic])
   ntfy             ntfy push notifications (topic + optional token, title = pygmy topic)
 
@@ -40,7 +39,6 @@ MESSAGES
 
 CONFIG
   {config_dir}/config.toml       Backend credentials and enabled/disabled state
-  {cache_dir}/topics.toml        Telegram topic name → thread ID cache (auto-managed)
 
 SETUP
   Run `pygmy init telegram`, `pygmy init discord-webhook`, or `pygmy init ntfy` for guided setup.
