@@ -28,8 +28,9 @@ pub async fn run_telegram() -> Result<()> {
     println!("{} Bot token saved", "✓".green());
     println!();
 
-    println!("{}", "Step 2: Create a Channel (not a group!)".bold());
-    println!("1. Create a new Telegram channel (not a group!)");
+    println!("{}", "Step 2: Create a Channel".bold());
+    println!("Important: a channel, not a regular Telegram group!");
+    println!("1. Create a new Telegram channel");
     println!("2. Add your bot as an admin of the channel");
     println!("3. Post any message in the channel (so the bot can discover it)");
     println!();
