@@ -39,6 +39,7 @@ struct GetUpdatesResponse {
 #[derive(Debug, Deserialize)]
 pub struct Update {
     pub message: Option<Message>,
+    pub channel_post: Option<Message>,
     pub my_chat_member: Option<ChatMemberUpdated>,
 }
 

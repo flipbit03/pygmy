@@ -28,8 +28,8 @@ pub async fn run_telegram() -> Result<()> {
     println!("{} Bot token saved", "✓".green());
     println!();
 
-    println!("{}", "Step 2: Create a Channel".bold());
-    println!("1. Create a new Telegram channel");
+    println!("{}", "Step 2: Create a Channel (not a group!)".bold());
+    println!("1. Create a new Telegram channel (not a group!)");
     println!("2. Add your bot as an admin of the channel");
     println!("3. Post any message in the channel (so the bot can discover it)");
     println!();
@@ -43,7 +43,8 @@ pub async fn run_telegram() -> Result<()> {
     let mut seen = std::collections::HashSet::new();
 
     for update in &updates {
-        if let Some(msg) = &update.message {
+        // Channel messages arrive as channel_post, not message
+        for msg in update.channel_post.iter().chain(update.message.iter()) {
             let chat = &msg.chat;
             if chat.chat_type == "channel" && seen.insert(chat.id) {
                 let title = chat.title.clone().unwrap_or_else(|| "Untitled".into());
