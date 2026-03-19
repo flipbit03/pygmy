@@ -68,26 +68,14 @@ pub async fn send(topic: &str, message: &str) -> Result<()> {
 
 async fn send_telegram(config: &config::TelegramConfig, topic: &str, message: &str) -> Result<()> {
     let token = &config.bot_token;
-    let group_id = &config.group_id;
+    let channel_id = &config.channel_id;
 
-    let mut thread_id = resolve_topic(token, group_id, topic).await?;
-    let html = markdown::to_telegram_html(message);
+    let prefixed = format!("**[{topic}]**\n{message}");
+    let html = markdown::to_telegram_html(&prefixed);
     let chunks = chunk_message(&html, TELEGRAM_MAX_LENGTH);
 
-    let first_result = telegram::send_message(token, group_id, &chunks[0], Some(thread_id)).await;
-
-    if let Err(e) = &first_result {
-        if e.to_string().contains("thread_not_found") {
-            // Cached topic was deleted on Telegram's side — recreate it.
-            thread_id = recreate_topic(token, group_id, topic).await?;
-            telegram::send_message(token, group_id, &chunks[0], Some(thread_id)).await?;
-        } else {
-            first_result?;
-        }
-    }
-
-    for chunk in &chunks[1..] {
-        telegram::send_message(token, group_id, chunk, Some(thread_id)).await?;
+    for chunk in &chunks {
+        telegram::send_message(token, channel_id, chunk).await?;
     }
 
     Ok(())
@@ -117,31 +105,6 @@ async fn send_ntfy(config: &config::NtfyConfig, topic: &str, message: &str) -> R
     }
 
     Ok(())
-}
-
-async fn recreate_topic(token: &str, group_id: &str, topic: &str) -> Result<i64> {
-    let mut cache = config::load_topics();
-    cache.topics.remove(topic);
-
-    let thread_id = telegram::create_forum_topic(token, group_id, topic).await?;
-    cache.topics.insert(topic.to_string(), thread_id);
-    config::save_topics(&cache)?;
-
-    Ok(thread_id)
-}
-
-async fn resolve_topic(token: &str, group_id: &str, topic: &str) -> Result<i64> {
-    let mut cache = config::load_topics();
-
-    if let Some(&thread_id) = cache.topics.get(topic) {
-        return Ok(thread_id);
-    }
-
-    let thread_id = telegram::create_forum_topic(token, group_id, topic).await?;
-    cache.topics.insert(topic.to_string(), thread_id);
-    config::save_topics(&cache)?;
-
-    Ok(thread_id)
 }
 
 fn chunk_message(text: &str, max_length: usize) -> Vec<String> {

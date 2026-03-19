@@ -28,13 +28,10 @@ pub async fn run_telegram() -> Result<()> {
     println!("{} Bot token saved", "✓".green());
     println!();
 
-    println!("{}", "Step 2: Create a Forum group".bold());
-    println!("1. Create a new Telegram group (you can be the only member)");
-    println!("2. Go to group settings → Topics → Enable");
-    println!(
-        "3. Add your bot to the group and make it admin (ensure \"Manage Topics\" is enabled)"
-    );
-    println!("4. Send /start in the group (important: must start with /)");
+    println!("{}", "Step 2: Create a Channel".bold());
+    println!("1. Create a new Telegram channel");
+    println!("2. Add your bot as an admin of the channel");
+    println!("3. Post any message in the channel (so the bot can discover it)");
     println!();
     prompt("Press Enter once done...")?;
 
@@ -42,54 +39,51 @@ pub async fn run_telegram() -> Result<()> {
         .await
         .context("Could not reach Telegram API — check your bot token.")?;
 
-    let mut groups: Vec<(i64, String)> = Vec::new();
+    let mut channels: Vec<(i64, String)> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
     for update in &updates {
         if let Some(msg) = &update.message {
             let chat = &msg.chat;
-            if (chat.chat_type == "group" || chat.chat_type == "supergroup") && seen.insert(chat.id)
-            {
+            if chat.chat_type == "channel" && seen.insert(chat.id) {
                 let title = chat.title.clone().unwrap_or_else(|| "Untitled".into());
-                groups.push((chat.id, title));
+                channels.push((chat.id, title));
             }
         }
         if let Some(member) = &update.my_chat_member {
             let chat = &member.chat;
-            if (chat.chat_type == "group" || chat.chat_type == "supergroup") && seen.insert(chat.id)
-            {
+            if chat.chat_type == "channel" && seen.insert(chat.id) {
                 let title = chat.title.clone().unwrap_or_else(|| "Untitled".into());
-                groups.push((chat.id, title));
+                channels.push((chat.id, title));
             }
         }
     }
 
-    if groups.is_empty() {
+    if channels.is_empty() {
         eprintln!(
-            "{} getUpdates returned {} update(s), but none contained group info.",
+            "{} getUpdates returned {} update(s), but none contained channel info.",
             "Debug:".dimmed(),
             updates.len()
         );
         anyhow::bail!(
-            "No groups found. Make sure you:\n\
-             1. Added the bot to a group\n\
-             2. Sent /start in the group (regular messages are invisible to bots)\n\
-             3. The group has Topics enabled\n\
+            "No channels found. Make sure you:\n\
+             1. Added the bot as an admin of the channel\n\
+             2. Posted a message in the channel\n\
              Then run `pygmy init telegram` again."
         );
     }
 
-    let (group_id, group_title) = if groups.len() == 1 {
-        let (id, title) = &groups[0];
-        println!("{} Found group: \"{}\" ({})", "✓".green(), title, id);
+    let (channel_id, channel_title) = if channels.len() == 1 {
+        let (id, title) = &channels[0];
+        println!("{} Found channel: \"{}\" ({})", "✓".green(), title, id);
         (*id, title.clone())
     } else {
-        println!("Found these groups:");
-        for (i, (id, title)) in groups.iter().enumerate() {
+        println!("Found these channels:");
+        for (i, (id, title)) in channels.iter().enumerate() {
             println!("  {}. \"{}\" ({})", i + 1, title, id);
         }
         println!();
-        let choice = prompt("Which group? [1]")?;
+        let choice = prompt("Which channel? [1]")?;
         let idx: usize = if choice.is_empty() {
             0
         } else {
@@ -99,7 +93,7 @@ pub async fn run_telegram() -> Result<()> {
                 .checked_sub(1)
                 .context("invalid choice")?
         };
-        let (id, title) = groups.get(idx).context("invalid choice")?;
+        let (id, title) = channels.get(idx).context("invalid choice")?;
         (*id, title.clone())
     };
 
@@ -107,28 +101,19 @@ pub async fn run_telegram() -> Result<()> {
     cfg.telegram = Some(TelegramConfig {
         enabled: true,
         bot_token: bot_token.clone(),
-        group_id: group_id.to_string(),
+        channel_id: channel_id.to_string(),
     });
     config::save_config(&cfg)?;
     println!();
 
     println!("{}", "Step 3: Test".bold());
-    print!("Creating test topic and sending message...");
+    print!("Sending test message...");
     io::stdout().flush()?;
-
-    let thread_id = telegram::create_forum_topic(&bot_token, &group_id.to_string(), "pygmy-test")
-        .await
-        .context(
-            "Could not create topic. Make sure:\n\
-             1. Topics are enabled in group settings\n\
-             2. The bot is an admin in the group",
-        )?;
 
     telegram::send_message(
         &bot_token,
-        &group_id.to_string(),
-        "pygmy is set up and working! 🎉",
-        Some(thread_id),
+        &channel_id.to_string(),
+        "<b>[pygmy-test]</b>\npygmy is set up and working! 🎉",
     )
     .await
     .context("Could not send test message")?;
@@ -136,7 +121,7 @@ pub async fn run_telegram() -> Result<()> {
     println!(
         "\r{} Test message delivered! Check \"{}\" in Telegram.",
         "✓".green(),
-        group_title
+        channel_title
     );
     println!();
     println!("{} Telegram is ready.", "Done.".green().bold());

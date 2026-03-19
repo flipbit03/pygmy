@@ -21,7 +21,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Topic name (used as Telegram forum topic / Discord message prefix / ntfy notification title).
+    /// Topic name (used as Telegram/Discord message prefix / ntfy notification title).
     #[arg(long, global = true)]
     topic: Option<String>,
 
@@ -61,7 +61,7 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum InitBackend {
-    /// Set up Telegram bot and forum group.
+    /// Set up Telegram bot and channel.
     Telegram,
     /// Set up Discord webhook notifications.
     DiscordWebhook,
@@ -149,10 +149,10 @@ fn run_status() -> anyhow::Result<()> {
     match &cfg.telegram {
         Some(tg) if tg.enabled => {
             println!(
-                "  {} {}  (group: {})",
+                "  {} {}  (channel: {})",
                 "✓".green(),
                 "telegram".bold(),
-                tg.group_id
+                tg.channel_id
             );
         }
         Some(_) => {
