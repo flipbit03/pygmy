@@ -1,5 +1,7 @@
+mod attachment;
 mod config;
 mod discord;
+mod http;
 mod init;
 mod markdown;
 mod ntfy;
@@ -29,6 +31,10 @@ struct Cli {
     #[arg(long)]
     stdin: bool,
 
+    /// Attach a file (repeatable). With files, the message is optional and used as the caption.
+    #[arg(long = "file", value_name = "PATH")]
+    files: Vec<std::path::PathBuf>,
+
     /// Message to send.
     message: Vec<String>,
 }
@@ -52,7 +58,7 @@ enum Command {
     },
     /// Show configured backends and their status.
     Status,
-    /// Print a compact LLM-friendly command reference.
+    /// Print the agent-facing reference: what pygmy can do (plain text, <1k tokens).
     Usage,
     /// Manage pygmy itself (update, etc.).
     #[command(name = "self")]
@@ -146,62 +152,17 @@ fn run_status() -> anyhow::Result<()> {
     println!("{}", "pygmy — notification backends".bold());
     println!();
 
-    match &cfg.telegram {
-        Some(tg) if tg.enabled => {
-            println!(
-                "  {} {}  (channel: {})",
-                "✓".green(),
-                "telegram".bold(),
-                tg.channel_id
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "telegram".bold());
-        }
-        None => {
-            println!(
-                "  {} {}  (not configured)",
-                "−".dimmed(),
-                "telegram".dimmed()
-            );
-        }
-    }
-
-    match &cfg.discord_webhook {
-        Some(dw) if dw.enabled => {
-            println!(
-                "  {} {}  (webhook configured)",
-                "✓".green(),
-                "discord-webhook".bold()
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "discord-webhook".bold());
-        }
-        None => {
-            println!(
-                "  {} {}  (not configured)",
-                "−".dimmed(),
-                "discord-webhook".dimmed()
-            );
-        }
-    }
-
-    match &cfg.ntfy {
-        Some(n) if n.enabled => {
-            println!(
-                "  {} {}  (topic: {}, server: {})",
-                "✓".green(),
-                "ntfy".bold(),
-                n.topic,
-                n.server
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "ntfy".bold());
-        }
-        None => {
-            println!("  {} {}  (not configured)", "−".dimmed(), "ntfy".dimmed());
+    for (name, state) in config::backend_states(&cfg) {
+        match state {
+            config::BackendState::Enabled(detail) => {
+                println!("  {} {}  ({detail})", "✓".green(), name.bold());
+            }
+            config::BackendState::Disabled => {
+                println!("  {} {}  (disabled)", "✗".red(), name.bold());
+            }
+            config::BackendState::NotConfigured => {
+                println!("  {} {}  (not configured)", "−".dimmed(), name.dimmed());
+            }
         }
     }
 
@@ -213,22 +174,34 @@ async fn run_send(cli: &Cli) -> anyhow::Result<()> {
         anyhow::anyhow!("--topic is required.\nUsage: pygmy --topic <NAME> <MESSAGE>")
     })?;
 
+    // Validate files up front, before reading stdin or sending anything.
+    let attachments = cli
+        .files
+        .iter()
+        .map(|p| attachment::Attachment::open(p))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let has_files = !attachments.is_empty();
+
     let message = if !cli.message.is_empty() {
         if cli.stdin {
             anyhow::bail!("Cannot provide both a message argument and --stdin.");
         }
         cli.message.join(" ")
-    } else if cli.stdin || !std::io::stdin().is_terminal() {
+    } else if cli.stdin || (!has_files && !std::io::stdin().is_terminal()) {
+        // With --file, stdin is only read when --stdin is explicit: agents run
+        // with stdin as a pipe, and the caption is optional.
         let mut buf = String::new();
         std::io::stdin().read_to_string(&mut buf)?;
         buf
+    } else if has_files {
+        String::new()
     } else {
         anyhow::bail!("No message provided.\nUsage: pygmy --topic <NAME> \"your message\"");
     };
 
-    if message.trim().is_empty() {
+    if message.trim().is_empty() && !has_files {
         anyhow::bail!("Message is empty.");
     }
 
-    send::send(topic, &message).await
+    send::send(topic, &message, &attachments).await
 }

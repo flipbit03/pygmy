@@ -64,6 +64,34 @@ EOF
 
 Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy messages are sent as-is (both render Markdown natively).
 
+A message that starts with `-` must come after `--` (e.g. `pygmy --topic ci -- "-3 tests failing"`), otherwise it is parsed as a flag. Long messages are split on line breaks to fit each backend (Telegram 4096, Discord 2000, ntfy 4096 bytes of rendered text).
+
+### Sending files
+
+```bash
+# Send a file with a caption
+pygmy --topic "nightly" --file ./report.pdf "Here's the report"
+
+# Several files, no caption
+pygmy --topic "nightly" --file ./build.log --file ./screenshot.png
+```
+
+`--file` can be repeated. When at least one file is given, the message is optional and becomes the caption of the first file (other files get just the `[topic]` prefix; on ntfy they get no message, so ntfy shows its default text). Files are checked up front: a missing, unreadable or empty (0-byte) path fails before anything is sent. With `--file`, stdin is only read when `--stdin` is passed explicitly.
+
+| Backend  | Max file size | Caption limit | How it's sent |
+|----------|---------------|---------------|---------------|
+| Telegram | 50 MB         | 1024 bytes    | `sendDocument` |
+| Discord  | 10 MB         | 2000 bytes    | webhook multipart upload, one message per file |
+| ntfy     | 15 MB*        | 4096 bytes    | `PUT` attachment |
+
+\* ntfy.sh default. Self-hosted ntfy servers need [attachments enabled](https://docs.ntfy.sh/config/#attachments), and may use a different limit.
+
+Caption and message limits are counted in bytes of the rendered text (after the `[topic]` prefix and, for Telegram, the HTML conversion). Telegram and Discord count characters, so this is conservative: non-ASCII text is split a bit earlier than strictly needed. Sizes are decimal (1 MB = 1,000,000 bytes).
+
+If the caption is longer than the backend's limit, the text is sent as a normal message first, then the files with a short `[topic]` caption. On ntfy, a caption containing a literal backslash-`n` (e.g. a Windows path) is also sent as a normal message first, because ntfy would turn `\n` in an attachment's message into a newline. A file over a backend's size limit fails that backend with an error naming the size and the limit; the other backends still send (pygmy succeeds if any backend succeeds).
+
+Each backend sends its items in order (text, then file 1, file 2, ...) and stops at the first error. A failure partway through (say, file 2 of 3) reports that backend as failed, even though the earlier items were already delivered.
+
 ### What it looks like
 
 **Telegram** — messages are prefixed with the topic name:
@@ -100,29 +128,17 @@ Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy
 
 ## Agent integration
 
-After setup, add this to your `CLAUDE.md` (or equivalent agent instructions file). `pygmy init` prints this snippet for you.
+After setup, add this to your `CLAUDE.md`/`AGENTS.md` (or equivalent agent instructions file). `pygmy init` prints it for you.
 
-~~~markdown
+```markdown
 ## Notifications (pygmy)
 
-Use `pygmy` to notify me. Messages are Markdown, sent to all enabled backends.
-
-**When to use:**
-- When I say "ping me", "notify me", or "let me know when done"
-- When completing a long-running task while I might be away
-- When you hit a blocker that requires my input
-
-**Usage:**
-```bash
-pygmy --topic "<topic>" "<message>"
-pygmy --topic "<topic>" --stdin <<'EOF'
-<long message>
-EOF
+Use the `pygmy` CLI to notify me when I ask to be pinged, when a long task
+finishes while I'm away, or when you're blocked on my input.
+Run `pygmy usage` before the first use for the full reference.
 ```
 
-Pick a short, descriptive topic name at the start of the session and reuse it for all messages.
-Don't notify for every small step — only meaningful milestones or blockers (or when asked to).
-~~~
+That's it — `pygmy usage` gives your agent the full reference (when to notify, sending, files and limits, which backends are set up on this machine) in under 1,000 tokens. `pygmy --help` has the detailed flag reference for humans.
 
 ## Self-update
 

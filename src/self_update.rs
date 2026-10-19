@@ -75,7 +75,7 @@ async fn update_binary(version: &str) -> Result<()> {
 
     println!("Downloading from GitHub Releases...");
 
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let bytes = client
         .get(&url)
         .header("User-Agent", "pygmy-self-update")

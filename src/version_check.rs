@@ -48,7 +48,7 @@ fn now_secs() -> u64 {
 
 async fn fetch_latest_version() -> anyhow::Result<String> {
     let url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let resp: serde_json::Value = client
         .get(&url)
         .header("User-Agent", "pygmy-self-update")
