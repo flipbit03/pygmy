@@ -1,3 +1,4 @@
+mod attachment;
 mod config;
 mod discord;
 mod init;
@@ -28,6 +29,10 @@ struct Cli {
     /// Read message from stdin.
     #[arg(long)]
     stdin: bool,
+
+    /// Attach a file (repeatable). With files, the message is optional and used as the caption.
+    #[arg(long = "file", value_name = "PATH")]
+    files: Vec<std::path::PathBuf>,
 
     /// Message to send.
     message: Vec<String>,
@@ -213,22 +218,34 @@ async fn run_send(cli: &Cli) -> anyhow::Result<()> {
         anyhow::anyhow!("--topic is required.\nUsage: pygmy --topic <NAME> <MESSAGE>")
     })?;
 
+    // Validate files up front, before reading stdin or sending anything.
+    let attachments = cli
+        .files
+        .iter()
+        .map(|p| attachment::Attachment::open(p))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let has_files = !attachments.is_empty();
+
     let message = if !cli.message.is_empty() {
         if cli.stdin {
             anyhow::bail!("Cannot provide both a message argument and --stdin.");
         }
         cli.message.join(" ")
-    } else if cli.stdin || !std::io::stdin().is_terminal() {
+    } else if cli.stdin || (!has_files && !std::io::stdin().is_terminal()) {
+        // With --file, stdin is only read when --stdin is explicit: agents run
+        // with stdin as a pipe, and the caption is optional.
         let mut buf = String::new();
         std::io::stdin().read_to_string(&mut buf)?;
         buf
+    } else if has_files {
+        String::new()
     } else {
         anyhow::bail!("No message provided.\nUsage: pygmy --topic <NAME> \"your message\"");
     };
 
-    if message.trim().is_empty() {
+    if message.trim().is_empty() && !has_files {
         anyhow::bail!("Message is empty.");
     }
 
-    send::send(topic, &message).await
+    send::send(topic, &message, &attachments).await
 }

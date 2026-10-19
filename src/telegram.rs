@@ -30,6 +30,40 @@ pub async fn send_message(token: &str, chat_id: &str, text: &str) -> Result<()> 
     Ok(())
 }
 
+/// Upload a file with `sendDocument`. An empty caption is omitted.
+pub async fn send_document(
+    token: &str,
+    chat_id: &str,
+    file_name: &str,
+    bytes: Vec<u8>,
+    caption: &str,
+) -> Result<()> {
+    let client = reqwest::Client::new();
+    let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string());
+    let mut form = reqwest::multipart::Form::new()
+        .text("chat_id", chat_id.to_string())
+        .part("document", part);
+    if !caption.is_empty() {
+        form = form
+            .text("caption", caption.to_string())
+            .text("parse_mode", "HTML");
+    }
+
+    let resp = client
+        .post(bot_url(token, "sendDocument"))
+        .multipart(form)
+        .send()
+        .await
+        .context("failed to reach Telegram API")?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Telegram API error ({}): {}", status, body);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 struct GetUpdatesResponse {
     ok: bool,

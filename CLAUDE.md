@@ -25,12 +25,13 @@ Single binary crate. No workspace, no sub-crates.
 ```
 src/
 ├── main.rs           # Clap CLI entry point
+├── attachment.rs     # --file validation (exists/readable), per-backend size limits
 ├── config.rs         # ~/.config/pygmy/config.toml
-├── telegram.rs       # Raw reqwest calls to Telegram Bot API (2 endpoints, no SDK)
-├── discord.rs        # Raw reqwest call to Discord webhook API (1 endpoint)
-├── ntfy.rs           # Raw reqwest call to ntfy API (1 endpoint, optional auth)
+├── telegram.rs       # Raw reqwest calls to Telegram Bot API (3 endpoints, no SDK)
+├── discord.rs        # Raw reqwest calls to Discord webhook API (1 endpoint: JSON or multipart)
+├── ntfy.rs           # Raw reqwest calls to ntfy API (POST message / PUT attachment, optional auth)
 ├── markdown.rs       # pulldown-cmark event filtering → Telegram HTML subset
-├── send.rs           # Multi-backend fan-out, topic prefix, message chunking
+├── send.rs           # Multi-backend fan-out, topic prefix, message chunking, file captions
 ├── init.rs           # Guided interactive setup (telegram / discord-webhook)
 ├── self_update.rs    # Binary or cargo self-update
 ├── version_check.rs  # GitHub releases version cache (24h TTL)
@@ -42,11 +43,17 @@ src/
 
 **Multi-backend architecture**: pygmy supports multiple notification backends (Telegram, Discord webhook, ntfy). Config has optional sections for each backend with an `enabled` flag. The send flow fans out to all enabled backends — returns success if any succeed, warns on stderr for failures.
 
-**Telegram API**: Only 2 endpoints — `sendMessage`, `getUpdates`. Direct `reqwest` calls, no Telegram SDK. Keep it this way.
+**Telegram API**: Only 3 endpoints — `sendMessage`, `sendDocument`, `getUpdates`. Direct `reqwest` calls, no Telegram SDK. Keep it this way.
 
 **Discord Webhook API**: Single POST to the webhook URL with `{ "content": "..." }`. Messages are prefixed with `**[topic-name]**` on a separate line. Discord renders Markdown natively, so raw markdown is sent as-is (no HTML conversion). Message limit is 2000 chars.
 
 **ntfy API**: Single POST to `{server}/{topic}` with raw markdown body. Headers: `Markdown: yes`, `Title: {pygmy-topic}`, and optional `Authorization: Bearer {token}`. Stateless — no topic creation or caching needed. Pygmy's `--topic` maps to the `Title` header. The ntfy topic in config is the "channel" (analogous to a Telegram group). Message limit is 4096 bytes.
+
+**Attachments (`--file`)**: Repeatable `--file <PATH>`. Files are validated up front in `main.rs` (exists, regular file, openable) via `attachment::Attachment::open`; bytes are only read when a backend uploads. With files, the message is optional and is the caption of the first file; later files get the short topic-only caption. With `--file`, stdin is read only on explicit `--stdin` (agents run with stdin as a pipe). `send::plan_captions` decides caption handling: if the full caption is over the backend's limit (Telegram 1024, Discord 2000, ntfy 4096), the text goes through the normal chunked message path first and all files get the short caption. Size limits live in `attachment.rs` (decimal MB, conservative): Telegram 50 MB, Discord 10 MB, ntfy 15 MB. A file over the limit fails that backend before anything is sent to it (no zipping/splitting); the usual fan-out rule applies. reqwest's `multipart` feature is on for this.
+
+- Telegram: `sendDocument` multipart (`chat_id`, `document`, `caption`, `parse_mode=HTML`), caption keeps the `[topic]` prefix.
+- Discord: multipart POST to the webhook URL with `payload_json` (`{"content": ...}`) and `files[0]`. One webhook message per file, so the per-message upload limit never adds up across files.
+- ntfy: `PUT {server}/{topic}` with the raw bytes as the body; headers `Filename`, `Title` (pygmy topic), optional `Message` (caption) + `Markdown: yes`, optional bearer auth. Non-ASCII or multiline header values are sent as RFC 2047 `=?UTF-8?B?...?=` encoded words (ntfy decodes them).
 
 **Markdown → HTML (Telegram only)**: `pulldown-cmark` event-based parser, filtered to emit only Telegram-supported tags (`<b>`, `<i>`, `<s>`, `<code>`, `<pre>`, `<a>`, `<blockquote>`). Unsupported elements degrade to plain text (headings → bold, lists → unicode bullets). Discord gets raw markdown.
 
@@ -66,12 +73,14 @@ src/
 - Bot needs **admin** on the channel to post messages. Add the bot as an admin when creating the channel.
 - `getUpdates` returns `channel_post` (messages in the channel) and `my_chat_member` events (when bot is added as admin) — `init` checks both to discover channels.
 - Telegram message limit is 4096 chars. `send.rs` chunks on line boundaries.
+- `sendDocument` caption limit is 1024 chars; bot upload limit is 50 MB.
 
 ### Discord Webhook
 - Webhook URLs look like `https://discord.com/api/webhooks/{id}/{token}` — validated during init.
 - No bot setup, no permissions, no admin — just create a webhook in channel settings and paste the URL.
 - Discord message limit is 2000 chars. `send.rs` chunks on line boundaries.
 - Discord renders Markdown natively, so no conversion is needed.
+- Webhook file uploads are limited to 10 MB per file (no boost).
 
 ### ntfy
 - On the public `ntfy.sh` server, the topic name is effectively a password — anyone who knows it can read/write. Init warns users to pick hard-to-guess names.
@@ -79,6 +88,7 @@ src/
 - Message limit is 4096 bytes. `send.rs` chunks on line boundaries (same as Telegram).
 - Optional bearer token auth for self-hosted instances with ACLs. Public ntfy.sh needs no auth.
 - Server URL is configurable, defaults to `https://ntfy.sh` during init.
+- Attachments work on ntfy.sh (15 MB default). Self-hosted servers need `attachment-cache-dir` set, otherwise uploads are rejected; their size limit may differ.
 
 ## CI/CD
 

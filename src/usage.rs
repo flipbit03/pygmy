@@ -12,6 +12,8 @@ USAGE
   pygmy --topic <TOPIC> <MESSAGE>           Send to all enabled backends
   pygmy --topic <TOPIC> --stdin             Read message from stdin
   echo \"...\" | pygmy --topic <TOPIC>        Pipe message from stdin
+  pygmy --topic <TOPIC> --file <PATH> [MSG]
+                                            Send a file; MSG (optional) is the caption
   pygmy init telegram                       Set up Telegram bot + channel
   pygmy init discord-webhook                Set up Discord webhook
   pygmy init ntfy                           Set up ntfy push notifications
@@ -24,6 +26,9 @@ USAGE
 
 OPTIONS
   --topic <NAME>   Topic name (Telegram/Discord message prefix / ntfy title)
+  --file <PATH>    Attach a file. Repeat for several files. With --file the
+                   message is optional; stdin is read only with --stdin.
+  --stdin          Read the message from stdin
 
 BACKENDS
   telegram         Telegram Bot API with channel (requires bot + channel)
@@ -36,6 +41,14 @@ MESSAGES
   Discord: sent as-is (Discord renders Markdown natively).
   ntfy: sent as Markdown (rendered in web app; mobile shows raw text).
   Long messages are automatically split (4096 for Telegram/ntfy, 2000 for Discord).
+
+FILES
+  Each file is uploaded to every enabled backend; the message becomes the caption
+  of the first file. If the caption is too long for the backend (Telegram 1024,
+  Discord 2000, ntfy 4096), the text is sent as a normal message before the files.
+  Size limits per file: Telegram 50 MB, Discord 10 MB, ntfy 15 MB (ntfy.sh default;
+  self-hosted ntfy servers must have attachments enabled).
+  A file over a backend's limit fails that backend; the others still send.
 
 CONFIG
   {config_dir}/config.toml       Backend credentials and enabled/disabled state

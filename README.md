@@ -64,6 +64,28 @@ EOF
 
 Messages are Markdown. Telegram messages are converted to HTML; Discord and ntfy messages are sent as-is (both render Markdown natively).
 
+### Sending files
+
+```bash
+# Send a file with a caption
+pygmy --topic "nightly" --file ./report.pdf "Here's the report"
+
+# Several files, no caption
+pygmy --topic "nightly" --file ./build.log --file ./screenshot.png
+```
+
+`--file` can be repeated. When at least one file is given, the message is optional and becomes the caption of the first file (other files get just the `[topic]` prefix). Files are checked up front: a missing or unreadable path fails before anything is sent. With `--file`, stdin is only read when `--stdin` is passed explicitly.
+
+| Backend  | Max file size | Caption limit | How it's sent |
+|----------|---------------|---------------|---------------|
+| Telegram | 50 MB         | 1024 chars    | `sendDocument` |
+| Discord  | 10 MB         | 2000 chars    | webhook multipart upload, one message per file |
+| ntfy     | 15 MB*        | 4096 bytes    | `PUT` attachment |
+
+\* ntfy.sh default. Self-hosted ntfy servers need [attachments enabled](https://docs.ntfy.sh/config/#attachments), and may use a different limit.
+
+If the caption is longer than the backend's limit, the text is sent as a normal message first, then the files with a short `[topic]` caption. A file over a backend's size limit fails that backend with an error naming the size and the limit; the other backends still send (pygmy succeeds if any backend succeeds).
+
 ### What it looks like
 
 **Telegram** — messages are prefixed with the topic name:
@@ -111,6 +133,7 @@ Use `pygmy` to notify me. Messages are Markdown, sent to all enabled backends.
 - When I say "ping me", "notify me", or "let me know when done"
 - When completing a long-running task while I might be away
 - When you hit a blocker that requires my input
+- When I ask you to send me a file (report, log, screenshot, etc.)
 
 **Usage:**
 ```bash
@@ -118,7 +141,10 @@ pygmy --topic "<topic>" "<message>"
 pygmy --topic "<topic>" --stdin <<'EOF'
 <long message>
 EOF
+pygmy --topic "<topic>" --file ./report.pdf "<optional caption>"
 ```
+
+`--file` can be repeated. Max file size: 10 MB (Discord), 15 MB (ntfy), 50 MB (Telegram).
 
 Pick a short, descriptive topic name at the start of the session and reuse it for all messages.
 Don't notify for every small step — only meaningful milestones or blockers (or when asked to).
