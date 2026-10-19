@@ -7,10 +7,10 @@ use crate::markdown;
 use crate::ntfy;
 use crate::telegram;
 
-const TELEGRAM_MAX_LENGTH: usize = 4096;
-const TELEGRAM_MAX_CAPTION_LENGTH: usize = 1024;
-const DISCORD_MAX_LENGTH: usize = 2000;
-const NTFY_MAX_LENGTH: usize = 4096;
+pub const TELEGRAM_MAX_LENGTH: usize = 4096;
+pub const TELEGRAM_MAX_CAPTION_LENGTH: usize = 1024;
+pub const DISCORD_MAX_LENGTH: usize = 2000;
+pub const NTFY_MAX_LENGTH: usize = 4096;
 
 /// Send a notification to every enabled backend.
 ///

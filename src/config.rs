@@ -76,3 +76,54 @@ pub fn config_dir_display() -> String {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "~/.config/pygmy".to_string())
 }
+
+/// Whether a backend is set up, and if so whether it's enabled.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BackendState {
+    /// Enabled, with a short human-readable detail (e.g. "channel: -100123").
+    Enabled(String),
+    Disabled,
+    NotConfigured,
+}
+
+/// The state of every backend, in a fixed order, keyed by its CLI name.
+/// Shared by `pygmy status` and the `pygmy usage` footer.
+pub fn backend_states(cfg: &Config) -> [(&'static str, BackendState); 3] {
+    fn state<T>(
+        section: Option<&T>,
+        enabled: impl Fn(&T) -> bool,
+        detail: impl Fn(&T) -> String,
+    ) -> BackendState {
+        match section {
+            Some(s) if enabled(s) => BackendState::Enabled(detail(s)),
+            Some(_) => BackendState::Disabled,
+            None => BackendState::NotConfigured,
+        }
+    }
+    [
+        (
+            "telegram",
+            state(
+                cfg.telegram.as_ref(),
+                |t| t.enabled,
+                |t| format!("channel: {}", t.channel_id),
+            ),
+        ),
+        (
+            "discord-webhook",
+            state(
+                cfg.discord_webhook.as_ref(),
+                |d| d.enabled,
+                |_| "webhook configured".to_string(),
+            ),
+        ),
+        (
+            "ntfy",
+            state(
+                cfg.ntfy.as_ref(),
+                |n| n.enabled,
+                |n| format!("topic: {}, server: {}", n.topic, n.server),
+            ),
+        ),
+    ]
+}

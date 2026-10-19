@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 /// Sizes are in decimal megabytes (1 MB = 1,000,000 bytes), which is slightly
 /// stricter than the binary MiB some services use — a conservative choice.
-const MB: u64 = 1_000_000;
+pub const MB: u64 = 1_000_000;
 
 pub const TELEGRAM_MAX_FILE_SIZE: u64 = 50 * MB;
 pub const DISCORD_MAX_FILE_SIZE: u64 = 10 * MB;

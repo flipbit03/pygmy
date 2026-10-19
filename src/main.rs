@@ -58,7 +58,7 @@ enum Command {
     },
     /// Show configured backends and their status.
     Status,
-    /// Print a compact LLM-friendly command reference.
+    /// Print the agent-facing reference: what pygmy can do (plain text, <1k tokens).
     Usage,
     /// Manage pygmy itself (update, etc.).
     #[command(name = "self")]
@@ -152,62 +152,17 @@ fn run_status() -> anyhow::Result<()> {
     println!("{}", "pygmy — notification backends".bold());
     println!();
 
-    match &cfg.telegram {
-        Some(tg) if tg.enabled => {
-            println!(
-                "  {} {}  (channel: {})",
-                "✓".green(),
-                "telegram".bold(),
-                tg.channel_id
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "telegram".bold());
-        }
-        None => {
-            println!(
-                "  {} {}  (not configured)",
-                "−".dimmed(),
-                "telegram".dimmed()
-            );
-        }
-    }
-
-    match &cfg.discord_webhook {
-        Some(dw) if dw.enabled => {
-            println!(
-                "  {} {}  (webhook configured)",
-                "✓".green(),
-                "discord-webhook".bold()
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "discord-webhook".bold());
-        }
-        None => {
-            println!(
-                "  {} {}  (not configured)",
-                "−".dimmed(),
-                "discord-webhook".dimmed()
-            );
-        }
-    }
-
-    match &cfg.ntfy {
-        Some(n) if n.enabled => {
-            println!(
-                "  {} {}  (topic: {}, server: {})",
-                "✓".green(),
-                "ntfy".bold(),
-                n.topic,
-                n.server
-            );
-        }
-        Some(_) => {
-            println!("  {} {}  (disabled)", "✗".red(), "ntfy".bold());
-        }
-        None => {
-            println!("  {} {}  (not configured)", "−".dimmed(), "ntfy".dimmed());
+    for (name, state) in config::backend_states(&cfg) {
+        match state {
+            config::BackendState::Enabled(detail) => {
+                println!("  {} {}  ({detail})", "✓".green(), name.bold());
+            }
+            config::BackendState::Disabled => {
+                println!("  {} {}  (disabled)", "✗".red(), name.bold());
+            }
+            config::BackendState::NotConfigured => {
+                println!("  {} {}  (not configured)", "−".dimmed(), name.dimmed());
+            }
         }
     }
 

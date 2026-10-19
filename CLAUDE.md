@@ -33,12 +33,23 @@ src/
 ├── ntfy.rs           # Raw reqwest calls to ntfy API (POST message / PUT attachment, optional auth)
 ├── markdown.rs       # pulldown-cmark event filtering → Telegram HTML subset
 ├── send.rs           # Multi-backend fan-out, topic prefix, message chunking, file captions
-├── init.rs           # Guided interactive setup (telegram / discord-webhook)
+├── init.rs           # Guided interactive setup (telegram / discord-webhook / ntfy)
 ├── self_update.rs    # Binary or cargo self-update
 ├── version_check.rs  # GitHub releases version cache (24h TTL)
-├── usage.rs          # LLM-friendly compact help
-└── pygmy_claude_snippet.md  # CLAUDE.md snippet printed by `pygmy init` (included via include_str!)
+├── usage.rs          # `pygmy usage`: agent-facing reference (plain text) + backend status footer
+└── pygmy_claude_snippet.md  # Minimal agent snippet printed by `pygmy init` (included via include_str!)
+tests/
+└── usage.rs          # Runs the binary with an empty XDG config (usage footer, `--` handling)
 ```
+
+## `pygmy usage` (agent entry point)
+
+- The snippet users paste into `CLAUDE.md`/`AGENTS.md` (`src/pygmy_claude_snippet.md`, also in the README "Agent integration" section) is tiny: when to notify + "run `pygmy usage`". Keep it that way; details belong in `usage`.
+- `pygmy usage` is the complete agent-facing reference, **plain text** in the style of `tu usage` / `lineark usage`: a hand-written raw string in `usage.rs`, UPPERCASE section headings (`WHEN TO NOTIFY:`, `SENDING:`, ...), two-column `command   description` lines aligned with spaces. No Markdown syntax (no `#`, no pipe tables, no backticks).
+- `usage` ≠ `--help`. `usage` = "what can I do?" for agents; `--help` = clap detail for humans.
+- Keep `usage` under ~1000 tokens (a test caps it at 4000 bytes).
+- Limits in `usage` are rendered from the constants in `attachment.rs` / `send.rs` with `format!`, never typed by hand. The footer shows which backends are enabled/disabled/not configured (via `config::backend_states`, shared with `pygmy status`; no credentials or topics), plus the cached update hint.
+- **Update `usage.rs` whenever commands, flags, limits or send semantics change.**
 
 ## Key Design Decisions
 
