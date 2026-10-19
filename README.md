@@ -133,9 +133,9 @@ After setup, add this to your `CLAUDE.md`/`AGENTS.md` (or equivalent agent instr
 ```markdown
 ## Notifications (pygmy)
 
-Use the `pygmy` CLI to notify me (messages and files go to my phone) when I ask
-to be pinged, when a long task finishes while I'm away, or when you're blocked on
-my input. Run `pygmy usage` before the first use for the full reference.
+Use the `pygmy` CLI to notify me when I ask to be pinged, when a long task
+finishes while I'm away, or when you're blocked on my input.
+Run `pygmy usage` before the first use for the full reference.
 ```
 
 That's it — `pygmy usage` gives your agent the full reference (when to notify, sending, files and limits, which backends are set up on this machine) in under 1,000 tokens. `pygmy --help` has the detailed flag reference for humans.
