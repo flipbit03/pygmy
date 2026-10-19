@@ -1,6 +1,7 @@
 mod attachment;
 mod config;
 mod discord;
+mod http;
 mod init;
 mod markdown;
 mod ntfy;

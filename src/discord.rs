@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
 pub async fn send_message(webhook_url: &str, content: &str) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let body = serde_json::json!({
         "content": content,
     });
@@ -28,7 +28,7 @@ pub async fn send_file(
     file_name: &str,
     bytes: Vec<u8>,
 ) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let payload = serde_json::json!({ "content": content });
     let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string());
     let form = reqwest::multipart::Form::new()

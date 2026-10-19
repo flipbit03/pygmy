@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -27,14 +28,19 @@ impl Attachment {
         if !meta.is_file() {
             anyhow::bail!("{} is not a regular file", path.display());
         }
+        if meta.len() == 0 {
+            anyhow::bail!("{} is empty (0 bytes); nothing to send", path.display());
+        }
         // Opening proves we have read permission.
         std::fs::File::open(path)
             .with_context(|| format!("cannot read file {}", path.display()))?;
 
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "file".to_string());
+        let name = sanitize_name(
+            &path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        );
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -43,9 +49,41 @@ impl Attachment {
         })
     }
 
-    pub fn read(&self) -> Result<Vec<u8>> {
-        std::fs::read(&self.path)
-            .with_context(|| format!("cannot read file {}", self.path.display()))
+    /// Read the file, failing if it is now empty or over `limit` bytes
+    /// (it may have changed since `open` checked it).
+    pub fn read(&self, limit: u64) -> Result<Vec<u8>> {
+        let file = std::fs::File::open(&self.path)
+            .with_context(|| format!("cannot read file {}", self.path.display()))?;
+        let mut bytes = Vec::with_capacity(self.size.min(limit) as usize);
+        // Read at most one byte past the limit: enough to know it's too big.
+        file.take(limit + 1)
+            .read_to_end(&mut bytes)
+            .with_context(|| format!("cannot read file {}", self.path.display()))?;
+        if bytes.is_empty() {
+            anyhow::bail!("file {} is now empty (0 bytes)", self.name);
+        }
+        if bytes.len() as u64 > limit {
+            anyhow::bail!(
+                "file {} grew past the {} limit before it was sent",
+                self.name,
+                format_size(limit)
+            );
+        }
+        Ok(bytes)
+    }
+}
+
+/// Make a file name safe for multipart `filename=` and HTTP headers:
+/// control characters (CR, LF, ...) become `_`. Falls back to "file".
+fn sanitize_name(name: &str) -> String {
+    let clean: String = name
+        .chars()
+        .map(|c| if c.is_control() { '_' } else { c })
+        .collect();
+    if clean.is_empty() {
+        "file".to_string()
+    } else {
+        clean
     }
 }
 
@@ -125,6 +163,69 @@ mod tests {
         let dir = std::env::temp_dir();
         let err = Attachment::open(&dir).unwrap_err();
         assert!(err.to_string().contains("not a regular file"));
+    }
+
+    fn temp_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("pygmy-attach-{tag}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn open_rejects_empty_file() {
+        let path = temp_path("empty");
+        std::fs::write(&path, b"").unwrap();
+        let err = Attachment::open(&path).unwrap_err();
+        std::fs::remove_file(&path).unwrap();
+        assert!(err.to_string().contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn sanitize_replaces_control_chars() {
+        assert_eq!(sanitize_name("report.pdf"), "report.pdf");
+        assert_eq!(sanitize_name("a\r\nb.txt"), "a__b.txt");
+        assert_eq!(sanitize_name("tab\there\u{7f}"), "tab_here_");
+        assert_eq!(sanitize_name("relatório é.txt"), "relatório é.txt");
+        assert_eq!(sanitize_name(""), "file");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_sanitizes_name_with_crlf() {
+        let path = temp_path("evil\r\nContent-Type: text-html");
+        std::fs::write(&path, b"x").unwrap();
+        let a = Attachment::open(&path);
+        std::fs::remove_file(&path).unwrap();
+        let a = a.unwrap();
+        assert!(!a.name.contains(['\r', '\n']), "{:?}", a.name);
+        assert!(
+            a.name
+                .starts_with("pygmy-attach-evil__Content-Type: text-html-"),
+            "{:?}",
+            a.name
+        );
+    }
+
+    #[test]
+    fn read_rechecks_size_limit() {
+        let path = temp_path("grow");
+        std::fs::write(&path, b"hello").unwrap();
+        let a = Attachment::open(&path).unwrap();
+        std::fs::write(&path, b"hello world").unwrap();
+        let too_big = a.read(8);
+        let ok = a.read(100);
+        std::fs::remove_file(&path).unwrap();
+        let err = too_big.unwrap_err();
+        assert!(err.to_string().contains("limit"), "{err}");
+        assert_eq!(ok.unwrap(), b"hello world");
+    }
+
+    #[test]
+    fn read_at_exact_limit_ok() {
+        let path = temp_path("exact");
+        std::fs::write(&path, b"12345").unwrap();
+        let a = Attachment::open(&path).unwrap();
+        let r = a.read(5);
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(r.unwrap(), b"12345");
     }
 
     #[test]

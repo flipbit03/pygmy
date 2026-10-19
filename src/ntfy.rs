@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use crate::config::NtfyConfig;
 
 pub async fn send_message(config: &NtfyConfig, title: &str, content: &str) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let url = format!("{}/{}", config.server.trim_end_matches('/'), config.topic);
 
     let mut req = client
@@ -35,7 +35,7 @@ pub async fn send_file(
     file_name: &str,
     bytes: Vec<u8>,
 ) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let url = format!("{}/{}", config.server.trim_end_matches('/'), config.topic);
 
     let mut req = client

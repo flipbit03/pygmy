@@ -8,7 +8,7 @@ fn bot_url(token: &str, method: &str) -> String {
 }
 
 pub async fn send_message(token: &str, chat_id: &str, text: &str) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let body = serde_json::json!({
         "chat_id": chat_id,
         "text": text,
@@ -38,7 +38,7 @@ pub async fn send_document(
     bytes: Vec<u8>,
     caption: &str,
 ) -> Result<()> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let part = reqwest::multipart::Part::bytes(bytes).file_name(file_name.to_string());
     let mut form = reqwest::multipart::Form::new()
         .text("chat_id", chat_id.to_string())
@@ -96,7 +96,7 @@ pub struct Chat {
 }
 
 pub async fn get_updates(token: &str) -> Result<Vec<Update>> {
-    let client = reqwest::Client::new();
+    let client = crate::http::client();
     let resp: GetUpdatesResponse = client
         .post(bot_url(token, "getUpdates"))
         .json(&serde_json::json!({}))

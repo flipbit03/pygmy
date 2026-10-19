@@ -74,17 +74,21 @@ pygmy --topic "nightly" --file ./report.pdf "Here's the report"
 pygmy --topic "nightly" --file ./build.log --file ./screenshot.png
 ```
 
-`--file` can be repeated. When at least one file is given, the message is optional and becomes the caption of the first file (other files get just the `[topic]` prefix). Files are checked up front: a missing or unreadable path fails before anything is sent. With `--file`, stdin is only read when `--stdin` is passed explicitly.
+`--file` can be repeated. When at least one file is given, the message is optional and becomes the caption of the first file (other files get just the `[topic]` prefix; on ntfy they get no message, so ntfy shows its default text). Files are checked up front: a missing, unreadable or empty (0-byte) path fails before anything is sent. With `--file`, stdin is only read when `--stdin` is passed explicitly.
 
 | Backend  | Max file size | Caption limit | How it's sent |
 |----------|---------------|---------------|---------------|
-| Telegram | 50 MB         | 1024 chars    | `sendDocument` |
-| Discord  | 10 MB         | 2000 chars    | webhook multipart upload, one message per file |
+| Telegram | 50 MB         | 1024 bytes    | `sendDocument` |
+| Discord  | 10 MB         | 2000 bytes    | webhook multipart upload, one message per file |
 | ntfy     | 15 MB*        | 4096 bytes    | `PUT` attachment |
 
 \* ntfy.sh default. Self-hosted ntfy servers need [attachments enabled](https://docs.ntfy.sh/config/#attachments), and may use a different limit.
 
-If the caption is longer than the backend's limit, the text is sent as a normal message first, then the files with a short `[topic]` caption. A file over a backend's size limit fails that backend with an error naming the size and the limit; the other backends still send (pygmy succeeds if any backend succeeds).
+Caption and message limits are counted in bytes of the rendered text (after the `[topic]` prefix and, for Telegram, the HTML conversion). Telegram and Discord count characters, so this is conservative: non-ASCII text is split a bit earlier than strictly needed. Sizes are decimal (1 MB = 1,000,000 bytes).
+
+If the caption is longer than the backend's limit, the text is sent as a normal message first, then the files with a short `[topic]` caption. On ntfy, a caption containing a literal backslash-`n` (e.g. a Windows path) is also sent as a normal message first, because ntfy would turn `\n` in an attachment's message into a newline. A file over a backend's size limit fails that backend with an error naming the size and the limit; the other backends still send (pygmy succeeds if any backend succeeds).
+
+Each backend sends its items in order (text, then file 1, file 2, ...) and stops at the first error. A failure partway through (say, file 2 of 3) reports that backend as failed, even though the earlier items were already delivered.
 
 ### What it looks like
 

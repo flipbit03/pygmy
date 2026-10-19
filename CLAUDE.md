@@ -25,8 +25,9 @@ Single binary crate. No workspace, no sub-crates.
 ```
 src/
 ├── main.rs           # Clap CLI entry point
-├── attachment.rs     # --file validation (exists/readable), per-backend size limits
+├── attachment.rs     # --file validation (exists/readable/non-empty), name sanitizing, per-backend size limits
 ├── config.rs         # ~/.config/pygmy/config.toml
+├── http.rs           # Shared reqwest client (connect + overall timeouts)
 ├── telegram.rs       # Raw reqwest calls to Telegram Bot API (3 endpoints, no SDK)
 ├── discord.rs        # Raw reqwest calls to Discord webhook API (1 endpoint: JSON or multipart)
 ├── ntfy.rs           # Raw reqwest calls to ntfy API (POST message / PUT attachment, optional auth)
@@ -45,15 +46,21 @@ src/
 
 **Telegram API**: Only 3 endpoints — `sendMessage`, `sendDocument`, `getUpdates`. Direct `reqwest` calls, no Telegram SDK. Keep it this way.
 
-**Discord Webhook API**: Single POST to the webhook URL with `{ "content": "..." }`. Messages are prefixed with `**[topic-name]**` on a separate line. Discord renders Markdown natively, so raw markdown is sent as-is (no HTML conversion). Message limit is 2000 chars.
+**Discord Webhook API**: One endpoint, the webhook URL. Text messages are a JSON POST with `{ "content": "..." }`; files are a multipart POST to the same URL (see Attachments). Messages are prefixed with `**[topic-name]**` on a separate line. Discord renders Markdown natively, so raw markdown is sent as-is (no HTML conversion). Message limit is 2000 chars.
 
-**ntfy API**: Single POST to `{server}/{topic}` with raw markdown body. Headers: `Markdown: yes`, `Title: {pygmy-topic}`, and optional `Authorization: Bearer {token}`. Stateless — no topic creation or caching needed. Pygmy's `--topic` maps to the `Title` header. The ntfy topic in config is the "channel" (analogous to a Telegram group). Message limit is 4096 bytes.
+**ntfy API**: One URL, `{server}/{topic}`. Text messages are a POST with the raw markdown body; files are a PUT with the raw bytes (see Attachments). Headers: `Markdown: yes`, `Title: {pygmy-topic}`, and optional `Authorization: Bearer {token}`. Stateless — no topic creation or caching needed. Pygmy's `--topic` maps to the `Title` header. The ntfy topic in config is the "channel" (analogous to a Telegram group). Message limit is 4096 bytes.
 
-**Attachments (`--file`)**: Repeatable `--file <PATH>`. Files are validated up front in `main.rs` (exists, regular file, openable) via `attachment::Attachment::open`; bytes are only read when a backend uploads. With files, the message is optional and is the caption of the first file; later files get the short topic-only caption. With `--file`, stdin is read only on explicit `--stdin` (agents run with stdin as a pipe). `send::plan_captions` decides caption handling: if the full caption is over the backend's limit (Telegram 1024, Discord 2000, ntfy 4096), the text goes through the normal chunked message path first and all files get the short caption. Size limits live in `attachment.rs` (decimal MB, conservative): Telegram 50 MB, Discord 10 MB, ntfy 15 MB. A file over the limit fails that backend before anything is sent to it (no zipping/splitting); the usual fan-out rule applies. reqwest's `multipart` feature is on for this.
+**Limits are bytes**: All message/caption limits (`*_MAX_LENGTH` in `send.rs`) are compared against the byte length of the rendered text (Telegram HTML, Discord prefixed markdown, ntfy raw text). Telegram and Discord actually count characters, so bytes are conservative: non-ASCII text splits earlier than strictly needed. `chunk_message` never cuts inside a UTF-8 character.
+
+**HTTP timeouts**: Every request goes through `http::client()` (10 s connect, 10 min overall — enough for a 50 MB upload on a slow uplink). Don't create bare `reqwest::Client::new()`s.
+
+**Partial failure**: Each backend sends its items (text chunks, then files) in order and stops at the first error. That backend is reported as failed even though earlier items may already have been delivered; other backends are unaffected.
+
+**Attachments (`--file`)**: Repeatable `--file <PATH>`. Files are validated up front in `main.rs` (exists, regular file, openable, not empty — Telegram rejects empty documents) via `attachment::Attachment::open`, which also sanitizes the file name (control chars → `_`, empty → `file`) because reqwest doesn't strip CR/LF from multipart `filename=`. Bytes are only read when a backend uploads, and `Attachment::read(limit)` re-checks the size (the file may have grown since validation). With files, the message is optional and is the caption of the first file; later files get the short topic-only caption. With `--file`, stdin is read only on explicit `--stdin` (agents run with stdin as a pipe). `send::plan_captions` decides caption handling: if the full caption is over the backend's limit (Telegram 1024, Discord 2000, ntfy 4096), the text goes through the normal chunked message path first and all files get the short caption. Size limits live in `attachment.rs` (decimal MB, conservative): Telegram 50 MB, Discord 10 MB, ntfy 15 MB. A file over the limit fails that backend before anything is sent to it (no zipping/splitting); the usual fan-out rule applies. reqwest's `multipart` feature is on for this.
 
 - Telegram: `sendDocument` multipart (`chat_id`, `document`, `caption`, `parse_mode=HTML`), caption keeps the `[topic]` prefix.
 - Discord: multipart POST to the webhook URL with `payload_json` (`{"content": ...}`) and `files[0]`. One webhook message per file, so the per-message upload limit never adds up across files.
-- ntfy: `PUT {server}/{topic}` with the raw bytes as the body; headers `Filename`, `Title` (pygmy topic), optional `Message` (caption) + `Markdown: yes`, optional bearer auth. Non-ASCII or multiline header values are sent as RFC 2047 `=?UTF-8?B?...?=` encoded words (ntfy decodes them).
+- ntfy: `PUT {server}/{topic}` with the raw bytes as the body; headers `Filename`, `Title` (pygmy topic), optional `Message` (caption) + `Markdown: yes`, optional bearer auth. Non-ASCII or multiline header values are sent as RFC 2047 `=?UTF-8?B?...?=` encoded words (ntfy decodes them). After decoding, the ntfy server replaces the two characters `\n` in `Message` with a newline, so `send::plan_ntfy_captions` sends a caption containing a literal backslash-n text-first (as a normal message body) and the files without `Message`. Files after the first never get a `Message` (ntfy shows its default text).
 
 **Markdown → HTML (Telegram only)**: `pulldown-cmark` event-based parser, filtered to emit only Telegram-supported tags (`<b>`, `<i>`, `<s>`, `<code>`, `<pre>`, `<a>`, `<blockquote>`). Unsupported elements degrade to plain text (headings → bold, lists → unicode bullets). Discord gets raw markdown.
 

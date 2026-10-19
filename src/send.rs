@@ -128,7 +128,7 @@ async fn send_telegram_files(
             &config.bot_token,
             &config.channel_id,
             &att.name,
-            att.read()?,
+            att.read(attachment::TELEGRAM_MAX_FILE_SIZE)?,
             caption,
         )
         .await?;
@@ -176,7 +176,8 @@ async fn send_discord_files(
     // One webhook message per file keeps each request under Discord's
     // per-message upload limit regardless of how many files are sent.
     for (i, att) in attachments.iter().enumerate() {
-        discord::send_file(&config.url, plan.caption_for(i), &att.name, att.read()?).await?;
+        let bytes = att.read(attachment::DISCORD_MAX_FILE_SIZE)?;
+        discord::send_file(&config.url, plan.caption_for(i), &att.name, bytes).await?;
     }
 
     Ok(())
@@ -200,16 +201,15 @@ async fn send_ntfy_files(
 ) -> Result<()> {
     attachment::check_sizes(attachments, attachment::NTFY_MAX_FILE_SIZE)?;
 
-    // ntfy shows the topic as the title, so the caption is just the message.
-    let full = message.trim().to_string();
-    let plan = plan_captions(full, String::new(), NTFY_MAX_LENGTH);
+    let plan = plan_ntfy_captions(message);
 
     if plan.text_first {
         send_ntfy(config, topic, message).await?;
     }
 
     for (i, att) in attachments.iter().enumerate() {
-        ntfy::send_file(config, topic, plan.caption_for(i), &att.name, att.read()?).await?;
+        let bytes = att.read(attachment::NTFY_MAX_FILE_SIZE)?;
+        ntfy::send_file(config, topic, plan.caption_for(i), &att.name, bytes).await?;
     }
 
     Ok(())
@@ -252,6 +252,26 @@ fn plan_captions(full: String, short: String, max_length: usize) -> CaptionPlan 
     }
 }
 
+/// ntfy shows the topic as the title, so the caption is just the message.
+///
+/// The caption travels in the `Message` header, and the ntfy server turns the
+/// two characters `\n` in that header into a real newline. A caption with a
+/// literal backslash-n would arrive altered, so it goes text-first instead
+/// (as a normal message body, which ntfy leaves alone).
+fn plan_ntfy_captions(message: &str) -> CaptionPlan {
+    let full = message.trim().to_string();
+    if full.contains("\\n") {
+        return CaptionPlan {
+            text_first: true,
+            first: String::new(),
+            rest: String::new(),
+        };
+    }
+    plan_captions(full, String::new(), NTFY_MAX_LENGTH)
+}
+
+/// Split `text` into chunks of at most `max_length` bytes, preferring to cut
+/// after a newline and never cutting inside a UTF-8 character.
 fn chunk_message(text: &str, max_length: usize) -> Vec<String> {
     if text.len() <= max_length {
         return vec![text.to_string()];
@@ -266,11 +286,21 @@ fn chunk_message(text: &str, max_length: usize) -> Vec<String> {
             break;
         }
 
+        // Back off to a char boundary so the slice can't land mid-character.
+        let mut cut = max_length;
+        while !remaining.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        if cut == 0 {
+            // max_length is smaller than the first character: take it whole.
+            cut = remaining.chars().next().map_or(1, char::len_utf8);
+        }
+
         // Find a line break near the limit to split on.
-        let split_at = remaining[..max_length]
+        let split_at = remaining[..cut]
             .rfind('\n')
             .map(|i| i + 1) // include the newline in the current chunk
-            .unwrap_or(max_length);
+            .unwrap_or(cut);
 
         chunks.push(remaining[..split_at].to_string());
         remaining = &remaining[split_at..];
@@ -315,6 +345,45 @@ mod tests {
         for chunk in &chunks {
             assert!(chunk.len() <= DISCORD_MAX_LENGTH);
         }
+    }
+
+    #[test]
+    fn non_ascii_message_splits_on_char_boundary() {
+        // "é" is 2 bytes: 1100 of them is 2200 bytes, and byte 2000 is a
+        // boundary, but 1001 × "é" + "a" puts the limit mid-character.
+        for text in ["é".repeat(1100), format!("a{}", "é".repeat(1100))] {
+            let chunks = chunk_message(&text, DISCORD_MAX_LENGTH);
+            assert!(chunks.len() > 1);
+            for chunk in &chunks {
+                assert!(chunk.len() <= DISCORD_MAX_LENGTH);
+            }
+            assert_eq!(chunks.concat(), text);
+        }
+    }
+
+    #[test]
+    fn multibyte_chars_with_newlines_and_tiny_limit() {
+        let text = "日本語\n🎉🎉\nok";
+        for max in 1..=text.len() {
+            let chunks = chunk_message(text, max);
+            assert_eq!(chunks.concat(), text, "max={max}");
+        }
+    }
+
+    #[test]
+    fn ntfy_caption_with_literal_backslash_n_goes_text_first() {
+        let plan = plan_ntfy_captions(r"path C:\new\file");
+        assert!(plan.text_first);
+        assert_eq!(plan.caption_for(0), "");
+        assert_eq!(plan.caption_for(1), "");
+    }
+
+    #[test]
+    fn ntfy_caption_with_real_newline_stays_inline() {
+        let plan = plan_ntfy_captions("line one\nline two");
+        assert!(!plan.text_first);
+        assert_eq!(plan.caption_for(0), "line one\nline two");
+        assert_eq!(plan.caption_for(1), "");
     }
 
     #[test]
